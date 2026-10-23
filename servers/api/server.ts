@@ -28,7 +28,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void shutdown(signal)
       .then(() => process.exit(0))
       .catch((error: unknown) => {
-        logger.error("API shutdown failed.", { error: error instanceof Error ? error.message : String(error) });
+        logger.error("API shutdown failed.", { errorType: error instanceof Error ? error.name : "unknown" });
         process.exit(1);
       });
   });

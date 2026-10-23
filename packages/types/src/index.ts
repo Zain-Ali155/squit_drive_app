@@ -3,5 +3,14 @@ export type {
   ApiErrorCode,
   ApiErrorDetails,
   ApiErrorResponse,
-  ApiHealthResponse
+  ApiHealthResponse,
+  ApiDriveBreadcrumb,
+  ApiDriveEntry,
+  ApiDriveFileType,
+  ApiDriveFolderPathResponse,
+  ApiDriveListQuery,
+  ApiDriveListResponse,
+  ApiDriveSortBy,
+  ApiDriveSortOrder,
+  ApiDriveStorageUsage
 } from "./api/index.js";

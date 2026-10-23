@@ -11,5 +11,8 @@ export const readApiEnvironment = (
   API_PORT: source.API_PORT,
   WEB_ORIGIN: source.WEB_ORIGIN,
   MONGODB_URI: source.MONGODB_URI,
+  SUPABASE_URL: source.SUPABASE_URL,
+  SUPABASE_BUCKET: source.SUPABASE_BUCKET,
+  SUPABASE_SECRET_KEY: source.SUPABASE_SECRET_KEY,
   LOG_LEVEL: source.LOG_LEVEL
 });

@@ -88,3 +88,76 @@ GIT GOVERNANCE RECONCILIATION: 2026-09-18
 ## Next milestone
 
 M03.3 - Auth Vertical Slice Design. Authentication is not implemented in the current workspace.
+
+## SQUID Drive — Local-demo Phase D progress (2026-10-13)
+
+- Implemented the approved local-only Drive slice in the existing web and API workspaces. Google login remains out of this phase; the API derives a fixed server-owned local-demo owner.
+- The API Drive feature now exposes a root public surface, registers its route through the repository-required `routes/` category, and keeps Mongoose implementation inside the feature's `integrations/` boundary. Mongo metadata operations remain feature-scoped and owner-filtered.
+- The web feature provides a typed API client and local Drive UI. The API supports folder creation/list/search/rename/move/deletion, file upload/download/deletion, private Supabase API streaming, the 50,000,000-byte application cap, and internal pending-delete recovery state. Non-empty folder deletion is rejected; no trash/recycle bin exists.
+- Validation on 2026-10-13: repository architecture check passed; web tests 9/9, API tests 30/30, logging tests 3/3; web/API/shared-types/logging typechecks and ESLint passed. Test execution used existing `tsx` and Node.js built-in tests; no dependency installation or package-manager upgrade occurred.
+- A live Supabase check confirmed private bucket access and a tiny streamed upload/download/delete smoke, including cleanup. This does not verify a 50,000,000-byte provider transfer, the provider's configured maximum-size setting, or a staging E2E run.
+- Local preview was started on loopback. The `/drive` route initially revealed an unresolved app-local API client import; after correcting it, the page returned HTTP 200 and the web tests/typecheck/lint/repository check passed again. API `/health` returned 200; Drive API returned 503 because this preview intentionally had no MongoDB connection.
+- Live MongoDB persistence remains blocked: no reachable local MongoDB service/binary was present, and a secret-safe connection attempt failed with `MongooseServerSelectionError`. Browser E2E remains unavailable because the repository has no installed browser runner. These are open verification/release blockers; no production deployment is supported.
+- The repository-pinned pnpm version is 11.19.0, while the available executable reports 12.6.0 and cannot acquire its global store-operation lock. The implementation used the direct existing package runners plus `node codebase/cli/repo.mjs check`; no pnpm upgrade/install was attempted.
+- The current worktree continues to contain unrelated/pre-existing changes, including the pre-existing `.env.example` edit and untracked project-instruction file. They were not altered. No credentials or secret values are recorded here.
+
+## SQUID Drive — follow-up verification (2026-10-14)
+
+- Frontend inspection confirmed navigation/breadcrumbs, listing, global owner search, pagination, upload/download, rename/move, create-folder, and delete confirmation were present. Added browser upload progress reporting and an accessible progress bar, an error Retry action, and prevented an error response from also rendering the empty-folder state.
+- Web tests pass 10/10; web typecheck, ESLint, and production build pass. The production `/drive` page was opened in a browser and returned HTTP 200; the visible unavailable-state and Retry control were verified. No user-flow E2E claim is made.
+- Supabase private bucket remains confirmed. A real 50,000,000-byte synthetic upload/download round-trip passed with exact byte counts and cleanup. Bucket details endpoint did not provide numeric file-size limit; effective acceptance at the app cap is verified, while the exact configured ceiling/global plan setting remains a dashboard check.
+- MongoDB local service/binary is absent. Secret-safe read-only connectivity retry failed (`MongooseServerSelectionError` / `MongoNetworkError`); no metadata writes were attempted without a safe local database.
+- Browser E2E, live Mongo persistence, and exact Supabase dashboard size settings remain outstanding. No packages were installed, env files changed, or commits/pushes/deployments performed during this follow-up.
+
+## SQUID Drive — MongoDB connectivity diagnosis (2026-10-14)
+
+- Safely classified the existing configured database target as MongoDB Atlas using only URI scheme/host category metadata; no URI, hostname, database name, username, or secret was displayed. The target remains unchanged.
+- No local MongoDB service or `mongod` binary exists in this Windows environment. Atlas SRV DNS returned 3 records, and tested DNS/TCP connections succeeded. TLS handshakes failed for every tested node with `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR`; Mongoose server selection failed with three `Unknown` nodes and `MongoNetworkError`. This identifies a TLS/network-path blocker after TCP connectivity but does not isolate Atlas policy versus TLS interception or another intermediary.
+- API tests: `pnpm --filter @workspace/api test` was blocked by access denied acquiring pnpm's global store lock. The existing API test command was then run directly with the installed local `tsx` and Node.js built-in test runner: 30/30 passed. Tests use fakes/in-memory repositories and are not live-persistence evidence.
+- No production or configured database data was touched. Real metadata CRUD and the complete browser journey remain blocked until Atlas TLS/server selection succeeds. The recommended next step is for the network/Atlas owner to check cluster availability, egress/network access, and any TLS-inspecting proxy. After connectivity is restored, use a dedicated test owner/database for real CRUD and clean up test records before the browser journey.
+
+## SQUID Drive — MongoDB Atlas TLS recheck (2026-10-14)
+
+- Runtime versions: Node.js 24.21.0, Mongoose 9.10.1, MongoDB Node.js driver 7.6.0. The integration calls `mongoose.connect(uri)` without custom TLS overrides; configured `mongodb+srv` applies the driver's TLS defaults.
+- With strict certificate verification and hostname SNI/verification enabled, TLS succeeded to all 3 Atlas SRV nodes using default negotiation, TLS 1.2, and TLS 1.3. Node reported authorized peer certificates. Mongoose connected and disconnected successfully, confirming current server selection and authentication. The previously observed `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR` did not recur.
+- Web proxy environment-variable names are set (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`); values were neither read nor printed. WinHTTP reports direct access. These variables alone do not indicate that Mongoose sockets use a proxy. Security-service inventory was denied, and Wi-Fi/ISP or intermittent TLS interception cannot be ruled out by these checks.
+- API Node.js built-in test suite: 30/30 passed through installed local `tsx`; tests use fixtures and are not real Atlas persistence tests.
+- At the time of this TLS recheck, no database writes were made and database safety had not yet been confirmed. Subsequent live persistence and browser verification is recorded below.
+
+## SQUID Drive — Live persistence and browser verification (2026-10-14)
+
+- Owner confirmed `squid_drive` is their development/demo database and approved temporary test writes. Read-only baseline: no entries for `local-demo-owner`, including no root folder.
+- Live API Mongo CRUD passed for a unique temporary folder: create 201, owner/parent/name metadata verified, listing verified, rename 200 with normalized-name persistence, delete 204, and exact record absent afterward.
+- Browser origin mismatch was corrected by opening the same local app at `http://localhost:3000/drive`, matching the API's existing CORS origin. No configuration changes were made.
+- Browser successfully created/navigated into a unique folder, uploaded and listed a generated 75-byte PDF, and downloaded it. Source and download matched byte-for-byte and by SHA-256; Mongo metadata matched owner, parent, MIME type, size, and had an opaque storage key.
+- Browser rename and UI deletion remain unverified: the in-app browser does not support the app's `window.prompt()` rename UI (`prompt() is not supported`), and computer-use automation then stopped because it could not determine the active Windows browser URL. API-level rename/delete succeeded in the separate CRUD test. Do not mark the full browser E2E release gate passed.
+- Cleanup verified: API deleted the exact file (204) and folder (204); Mongo confirmed both records absent. An authenticated Supabase object lookup returned `not_found` after deletion. The root record was absent in baseline, created during listing, and removed after confirming it was the only remaining entry. Final owner entry count: 0. Generated fixture and downloaded copy were removed after checksum matching.
+- Existing API tests passed 30/30 with the Node.js built-in test runner and installed `tsx`. No source code, credentials, or environment configuration changed.
+
+## SQUID Drive — browser UI verification follow-up (2026-10-14)
+
+- Updated the existing Drive feature UI to use accessible in-app rename and permanent-delete dialogs instead of native prompt/confirm. Rename enforces trimmed nonempty names, max 255 characters, and rejects slash, backslash, and control characters. Cancel leaves data unchanged. Duplicate-name API failure is surfaced while retaining the current entries.
+- On the inventory-confirmed local browser tab `http://localhost:3000/drive`, the manual journey passed: create a unique folder; upload/list a synthetic 119-byte PDF; download and verify exact size and SHA-256; cancel rename; verify invalid-name rejection; verify duplicate-name API `409` preserves the listing; rename the file; cancel delete; then permanently delete the test file and two empty test folders through the UI. UI showed an empty root listing afterward. API search returned no entries matching the unique run token and the deleted file's download route returned 404. The user-approved cleanup removed only this run's exact test records and file storage object through the service's successful delete path. The service-managed root entry created during listing remains.
+- The generated fixture and browser download were removed after both hashes matched. No browser automation package was added. This evidence is a manual local browser journey, not automated E2E coverage or staging verification.
+- Validation: web Node.js built-in tests through `tsx` 10/10; web TypeScript typecheck passed; ESLint passed; Next.js production build passed; `node codebase/cli/repo.mjs check` reported no issues. `pnpm` remains blocked by access denied on its global store-operation lock, so validation used already-installed local tools; no dependency install or package-manager upgrade occurred.
+- The production-style local web process on loopback port 3000 was restarted from this repository's successful build so the existing browser tab loaded the new UI. API/database target and credentials were not changed. No commit, push, or deployment was performed.
+
+## SQUID Drive — final local-demo readiness audit (2026-10-14)
+
+- Verified repository architecture check: `node codebase/cli/repo.mjs check` passed with no issues.
+- Current automated checks using already-installed local tools: web Node.js built-in/tsx tests 10/10; API tests 30/30; logging tests 3/3; web, API, shared types, and logging typechecks passed; ESLint passed for those four workspaces; web production build (`next build`) and API production TypeScript build passed. No install or upgrade was attempted because the pinned pnpm workflow has a previously recorded global store lock/permission blocker.
+- The implementation has local-demo UI and API support for folder navigation, breadcrumbs, listing, owner-wide search under the fixed local-demo owner, bounded pagination, upload progress, file download, create/rename/move, and permanent deletion. Loading, empty, and safe error/retry states are present.
+- Prior evidence records live MongoDB folder create/list/rename/delete persistence and verified test-record cleanup; private Supabase bucket access and a 50,000,000-byte API-streamed round trip with temporary object cleanup; and a manual local-browser journey covering folder creation, synthetic upload/list/download with content verification, rename cancel/validation/conflict/success, file deletion, empty-folder deletion, and cleanup. This audit reran automated checks, not external-provider probes or the browser journey.
+- Security boundary: the local-demo API has no Google SSO/session authentication and uses a fixed local-demo owner. Repository owner filters protect feature queries but do not provide authenticated per-user isolation. Keep both servers loopback-only and do not expose this demo to untrusted users. Supabase file access is server-side and private; no public URLs are issued. The server enforces 50,000,000 bytes and filename/type/signature checks, but does not provide malware scanning or full content-semantic validation.
+- Failure handling permanently deletes files and rejects non-empty folder deletion; `pending_delete` is an internal provider-failure marker, not user-facing trash/recovery. Automated tests cover failure ordering/state, but no automated reconciler/retry command was verified. A failed best-effort cleanup can require documented manual operator recovery.
+- Release blockers: implement and staging-verify the approved Google OIDC/session/CSRF/Origin flow; add automated browser E2E for the release journey; verify the provider's exact dashboard upload ceiling and staging storage smoke; define/test retry and orphan cleanup operations and confirm operational handover; restore the normal pnpm task workflow under the repository-pinned version.
+- No staging authentication/storage verification or automated browser E2E was run. Local-demo results are not production-readiness evidence.
+- This audit updated only the existing SQUID Drive backlog and this project-state document. Other pre-existing worktree changes were preserved. No credentials, database target, environment configuration, commits, pushes, or deployments were changed.
+
+## SQUID Drive — automated browser E2E tooling check (2026-10-14)
+
+- Re-read repository testing, development, architecture, UI, and integration instructions. The existing web test script uses the Node.js built-in test runner with `tsx`.
+- Checked module resolution and workspace executable bins for Playwright, `@playwright/test`, Puppeteer, and Selenium WebDriver: none are installed. No browser E2E command is declared in repository manifests. The available Codex in-app browser is an interactive automation surface, not an integrated repeatable repository test runner.
+- Re-ran existing suites using installed local tools: web 10/10, API 30/30, logging 3/3 passed. These results do not constitute browser E2E coverage.
+- The requested automated browser journey remains blocked until a supported browser runner is approved and available. No dependency was installed, no custom driver was introduced, and no test database/storage writes or deletes occurred during this check.
+- Backlog task `SD-E05-S01-T03` remains partial. No application source code changed.

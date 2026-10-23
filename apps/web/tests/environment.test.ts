@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { ZodError } from "zod";
 import { createApiConfiguration } from "../config/api";
 import { readWebEnvironment } from "../config/env";
@@ -15,4 +16,18 @@ test("rejects an invalid API URL", () => {
 
 test("requires the API URL from the environment", () => {
   assert.throws(() => readWebEnvironment({}), ZodError);
+});
+
+test("web server scripts use the local-only dual-loopback server", async () => {
+  const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  const packageManifest = JSON.parse(packageText) as { scripts: Record<string, string> };
+
+  assert.equal(packageManifest.scripts.dev, "tsx server.ts --dev");
+  assert.equal(packageManifest.scripts.start, "tsx server.ts");
+});
+
+test("local web environment example targets the API on port 4000", async () => {
+  const exampleText = await readFile(new URL("../.env.example", import.meta.url), "utf8");
+
+  assert.match(exampleText, /^NEXT_PUBLIC_API_BASE_URL=http:\/\/127\.0\.0\.1:4000$/mu);
 });

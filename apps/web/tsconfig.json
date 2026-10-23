@@ -4,6 +4,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@workspace/types": [
+        "../../packages/types/src/index.ts"
       ]
     }
   },

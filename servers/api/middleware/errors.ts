@@ -15,7 +15,11 @@ export const createNotFoundHandler = (): RequestHandler => (request, _response, 
 };
 
 export const createErrorHandler = ({ logger }: { logger: Logger }): ErrorRequestHandler =>
-  (error: unknown, _request, response, _next) => {
+  (error: unknown, _request, response, next) => {
+    if (response.headersSent) {
+      next(error);
+      return;
+    }
     if (error instanceof ZodError) {
       const body: ApiErrorResponse = {
         error: { code: ERROR_CODES.validation, message: ERROR_MESSAGES.validation, details: error.issues }
@@ -34,7 +38,7 @@ export const createErrorHandler = ({ logger }: { logger: Logger }): ErrorRequest
       response.status(error.status).json(body);
       return;
     }
-    logger.error("Unhandled API error.", { error: error instanceof Error ? error.message : String(error) });
+    logger.error("Unhandled API error.", { errorType: error instanceof Error ? error.name : "unknown" });
     const body: ApiErrorResponse = {
       error: { code: ERROR_CODES.internal, message: ERROR_MESSAGES.internal }
     };

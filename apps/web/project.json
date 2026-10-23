@@ -2,8 +2,8 @@
   "name": "web",
   "type": "app",
   "description": "Primary Next.js web application.",
-  "internalDependencies": ["eslint-config", "tsconfig", "ui"],
-  "externalDependencies": ["lucide-react", "next", "react", "react-dom", "tailwindcss", "zod"],
+  "internalDependencies": ["eslint-config", "tsconfig", "types", "ui"],
+  "externalDependencies": ["@aiden0z/pptx-renderer", "lucide-react", "mammoth", "next", "pdfjs-dist", "react", "react-dom", "tailwindcss", "zod"],
   "capabilities": ["web", "app-router", "shadcn-ui", "tailwind"],
   "tasks": {
     "dev": { "command": "pnpm run dev", "cache": false },

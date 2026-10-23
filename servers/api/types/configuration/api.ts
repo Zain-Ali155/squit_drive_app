@@ -7,5 +7,8 @@ export type ApiConfig = Readonly<{
   port: number;
   webOrigin: string;
   mongodbUri?: string;
+  supabaseUrl?: string;
+  supabaseBucket?: string;
+  supabaseSecretKey?: string;
   logLevel: LogLevel;
 }>;

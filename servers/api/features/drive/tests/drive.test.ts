@@ -16,7 +16,7 @@ import { isApplicationError } from "../../../errors/index.js";
 import { createDriveService } from "../drive.service.js";
 import type { DriveRepository } from "../repositories/index.js";
 import type { SupabaseStorageIntegration } from "../integrations/drive.integration.js";
-import { driveEntrySchema, type DriveRepositoryModel } from "../models/index.js";
+import { driveEntrySchema, type DriveRepositoryModel } from "../integrations/drive.mongodb.integration.js";
 import { MAX_DRIVE_FILE_SIZE } from "../drive.validation.js";
 import {
   createFolderSchema,

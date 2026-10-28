@@ -34,7 +34,7 @@ void test("accepts localhost and IPv6 loopback origins", () => {
   assert.equal(environment.API_HOST, "localhost");
 });
 
-void test("rejects production mode and non-loopback bind hosts or web origins", () => {
+void test("rejects non-loopback bind hosts and invalid environment-specific web origins", () => {
   const valid = {
     NODE_ENV: "development",
     AUTH_MODE: "local-demo",
@@ -44,13 +44,36 @@ void test("rejects production mode and non-loopback bind hosts or web origins", 
     LOG_LEVEL: "warn"
   };
 
-  assert.throws(() => readApiEnvironment({ ...valid, NODE_ENV: "production" }));
   for (const host of ["0.0.0.0", "::", "192.168.1.20", "drive.example.test"]) {
     assert.throws(() => readApiEnvironment({ ...valid, API_HOST: host }), host);
   }
   for (const origin of ["https://example.test", "http://localhost:3000/path", "http://localhost.evil.test"]) {
     assert.throws(() => readApiEnvironment({ ...valid, WEB_ORIGIN: origin }), origin);
   }
+  assert.throws(() => readApiEnvironment({ ...valid, NODE_ENV: "production" }), /AUTH_MODE/u);
+});
+
+void test("accepts production Google authentication only for an HTTPS same-origin callback", () => {
+  const production = {
+    NODE_ENV: "production",
+    AUTH_MODE: "google",
+    API_HOST: "127.0.0.1",
+    API_PORT: "4000",
+    WEB_ORIGIN: "https://squid-drive-demo.vercel.app",
+    LOG_LEVEL: "info",
+    MONGODB_URI: "mongodb://localhost:27017/squid-drive",
+    GOOGLE_CLIENT_ID: "test-client-id",
+    GOOGLE_CLIENT_SECRET: "test-client-secret",
+    GOOGLE_REDIRECT_URI: "https://squid-drive-demo.vercel.app/auth/google/callback"
+  };
+
+  assert.equal(readApiEnvironment(production).NODE_ENV, "production");
+  assert.throws(() => readApiEnvironment({
+    ...production,
+    GOOGLE_REDIRECT_URI: "https://other-origin.vercel.app/auth/google/callback"
+  }));
+  assert.throws(() => readApiEnvironment({ ...production, WEB_ORIGIN: "http://localhost:3000" }));
+  assert.throws(() => readApiEnvironment({ ...production, AUTH_MODE: "local-demo" }));
 });
 
 void test("rejects invalid server environment input", () => {

@@ -18,6 +18,15 @@ const isLocalWebOrigin = (origin: string): boolean => {
   }
 };
 
+const isProductionWebOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "https:" && url.origin === origin;
+  } catch {
+    return false;
+  }
+};
+
 const isSupabaseProjectUrl = (value: string): boolean => {
   try {
     const url = new URL(value);
@@ -49,7 +58,7 @@ export const apiEnvironmentSchema = z.object({
   AUTH_MODE: z.enum(["local-demo", "google"]),
   API_HOST: z.string().refine(isLoopbackHost, "API_HOST must be localhost or a loopback address."),
   API_PORT: z.coerce.number().int().min(1).max(65_535),
-  WEB_ORIGIN: z.url().refine(isLocalWebOrigin, "WEB_ORIGIN must be an exact localhost or loopback origin."),
+  WEB_ORIGIN: z.url(),
   GOOGLE_CLIENT_ID: z.string().min(1).max(512).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).max(512).optional(),
   GOOGLE_REDIRECT_URI: z.string().refine(isGoogleRedirectUri, "GOOGLE_REDIRECT_URI must be a secure Google callback URL.").optional(),
@@ -58,9 +67,11 @@ export const apiEnvironmentSchema = z.object({
   SUPABASE_URL: z.url().refine(isSupabaseProjectUrl).optional(),
   SUPABASE_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/u).optional(),
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
-}).refine(({ NODE_ENV }) => NODE_ENV !== "production", {
-  path: ["NODE_ENV"],
-  message: "Production mode is not supported by the local-only demo."
+}).refine(({ NODE_ENV, WEB_ORIGIN }) => NODE_ENV === "production"
+  ? isProductionWebOrigin(WEB_ORIGIN)
+  : isLocalWebOrigin(WEB_ORIGIN), {
+  path: ["WEB_ORIGIN"],
+  message: "Production WEB_ORIGIN must be an exact HTTPS origin; local environments must use localhost or a loopback origin."
 }).refine(({ SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_SECRET_KEY }) => {
   const configuredCount = [SUPABASE_URL, SUPABASE_BUCKET, SUPABASE_SECRET_KEY].filter((value) => value !== undefined).length;
   return configuredCount === 0 || configuredCount === 3;
@@ -77,6 +88,19 @@ export const apiEnvironmentSchema = z.object({
 }, {
   path: ["AUTH_MODE"],
   message: "Google authentication requires complete Google credentials and MongoDB; local-demo mode must not include Google credentials."
+}).refine(({ NODE_ENV, AUTH_MODE }) => NODE_ENV !== "production" || AUTH_MODE === "google", {
+  path: ["AUTH_MODE"],
+  message: "Production deployments require Google authentication; local-demo mode is development-only."
+}).refine(({ NODE_ENV, AUTH_MODE, WEB_ORIGIN, GOOGLE_REDIRECT_URI }) => {
+  if (NODE_ENV !== "production" || AUTH_MODE !== "google" || GOOGLE_REDIRECT_URI === undefined) return true;
+  try {
+    return new URL(GOOGLE_REDIRECT_URI).origin === WEB_ORIGIN;
+  } catch {
+    return false;
+  }
+}, {
+  path: ["GOOGLE_REDIRECT_URI"],
+  message: "Production Google callback origin must match WEB_ORIGIN."
 }) satisfies z.ZodType<ValidatedApiEnvironment>;
 
 export const validateApiEnvironment = (input: unknown): ValidatedApiEnvironment =>

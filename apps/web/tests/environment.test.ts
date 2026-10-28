@@ -10,6 +10,12 @@ test("derives API configuration from validated environment input", () => {
   assert.deepEqual(createApiConfiguration(environment), { baseUrl: "https://api.example.test" });
 });
 
+test("accepts same-origin API routing for multi-service deployments", () => {
+  const environment = readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "/" });
+  assert.deepEqual(createApiConfiguration(environment), { baseUrl: "/" });
+  assert.equal(resolveBrowserApiBaseUrl(environment.NEXT_PUBLIC_API_BASE_URL, "squid-drive-demo.vercel.app"), "/");
+});
+
 test("rejects an invalid API URL", () => {
   assert.throws(() => readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "not-a-url" }));
 });

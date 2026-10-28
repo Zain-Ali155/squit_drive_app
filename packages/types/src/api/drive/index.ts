@@ -7,5 +7,9 @@ export type {
   ApiDriveListResponse,
   ApiDriveSortBy,
   ApiDriveSortOrder,
-  ApiDriveStorageUsage
+  ApiDriveStorageUsage,
+  ApiDriveShare,
+  ApiDriveShareListResponse,
+  ApiDriveShareLinkResponse,
+  ApiDriveSharedFile
 } from "./drive-entry.js";

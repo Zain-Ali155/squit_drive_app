@@ -10,6 +10,8 @@ const previewableMimeTypes = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
   "text/plain",
   "text/csv"
 ]);
@@ -17,6 +19,7 @@ const previewableMimeTypes = new Set([
 export const maxDrivePreviewBytes = 50_000_000;
 export const maxDrivePptxPreviewBytes = maxDrivePreviewBytes;
 export const maxDriveImagePreviewBytes = 15_000_000;
+export const maxDriveXlsxPreviewBytes = 10_000_000;
 
 export const normalizeDriveMimeType = (mimeType: string | undefined): string | undefined => {
   const normalized = mimeType?.split(";")[0]?.trim().toLowerCase();
@@ -27,10 +30,16 @@ export const drivePreviewKind = (mimeType: string | undefined, fileName?: string
   if (fileName?.toLowerCase().endsWith(".csv")) return "csv";
   const rawMimeType = mimeType?.split(";")[0]?.trim().toLowerCase();
   if (rawMimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return "pptx";
+  if (rawMimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return "xlsx";
+  if (rawMimeType === "application/vnd.ms-excel") return "xlsx";
   if (
     fileName?.toLowerCase().endsWith(".pptx") &&
     (!rawMimeType || ["application/octet-stream", "application/zip", "application/x-zip-compressed"].includes(rawMimeType))
   ) return "pptx";
+  if (
+    /\.(?:xls|xlsx)$/iu.test(fileName ?? "") &&
+    (!rawMimeType || ["application/octet-stream", "application/zip", "application/x-zip-compressed"].includes(rawMimeType))
+  ) return "xlsx";
   const normalized = normalizeDriveMimeType(mimeType);
   if (normalized?.startsWith("image/")) return "image";
   if (normalized === "application/pdf") return "pdf";
@@ -58,7 +67,8 @@ const drivePreviewTypeLabels: Readonly<Record<DrivePreviewKind, string>> = Objec
   docx: "Word document",
   pptx: "PowerPoint presentation",
   text: "Plain text",
-  csv: "CSV spreadsheet"
+  csv: "CSV spreadsheet",
+  xlsx: "Excel spreadsheet"
 });
 
 export const drivePreviewTypeLabel = (kind: DrivePreviewKind | undefined, mimeType?: string, fileName?: string): string => {

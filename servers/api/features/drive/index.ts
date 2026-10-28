@@ -4,7 +4,8 @@ export type {
   DriveEntryKind,
   DriveEntryRecord,
   DriveEntryState,
-  DrivePage
+  DrivePage,
+  DriveShareRecord
 } from "./drive.types.js";
 export type { DriveRepository } from "./repositories/index.js";
 export {

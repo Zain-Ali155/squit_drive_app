@@ -4,6 +4,7 @@ import {
   cleanupDrivePreview,
   createDriveListFilterOptions,
   createFolderAndClearName,
+  driveStorageUsagePercent,
   formatDriveStorageUsage,
   driveFavoriteActionLabel,
   driveFiltersAreActive,
@@ -22,6 +23,13 @@ void test("storage usage formatting uses readable units and bounded rounding", (
   assert.equal(formatDriveStorageUsage(1_250), "1.3 kB");
   assert.equal(formatDriveStorageUsage(1_250_000), "1.3 MB");
   assert.equal(formatDriveStorageUsage(1_250_000_000), "1.25 GB");
+});
+
+void test("storage quota meter percentage stays between zero and one hundred", (): void => {
+  assert.equal(driveStorageUsagePercent(100_000_000, 1_000_000_000), 10);
+  assert.equal(driveStorageUsagePercent(1_200_000_000, 1_000_000_000), 100);
+  assert.equal(driveStorageUsagePercent(-5, 1_000_000_000), 0);
+  assert.equal(driveStorageUsagePercent(5, 0), 0);
 });
 
 void test("opening a nested folder from search uses its full ancestry and breadcrumb navigation selects its parent", (): void => {
@@ -58,6 +66,9 @@ void test("Drive actions refresh storage only after uploads and file deletions",
     { mutation: "file-delete", expectedStorageRefresh: true },
     { mutation: "create-folder", expectedStorageRefresh: false },
     { mutation: "folder-delete", expectedStorageRefresh: false },
+    { mutation: "trash", expectedStorageRefresh: false },
+    { mutation: "restore", expectedStorageRefresh: false },
+    { mutation: "permanent-delete", expectedStorageRefresh: true },
     { mutation: "rename", expectedStorageRefresh: false },
     { mutation: "move", expectedStorageRefresh: false },
     { mutation: "favorite", expectedStorageRefresh: false }

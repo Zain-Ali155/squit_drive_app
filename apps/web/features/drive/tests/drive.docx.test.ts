@@ -150,6 +150,10 @@ void test("DOCX rendering drops malicious markup, scripts, handlers, unsafe URLs
   assert.match(markup, /aria-label="Word document preview"/u);
   assert.match(markup, /role="region"/u);
   assert.match(markup, /tabindex="0"/u);
+  assert.match(markup, /bg-\[#e8eaed\]/u);
+  assert.match(markup, /my-1 min-w-0 whitespace-pre-wrap break-words leading-6/u);
+  assert.match(markup, /my-1 inline-block h-auto max-h-\[50vh\] max-w-full object-contain align-middle/u);
+  assert.doesNotMatch(markup, /mx-auto my-5/u);
   assert.doesNotMatch(markup, /<script|<iframe|javascript:|onerror|onload|onclick|background-image|position:fixed|attacker-controlled|user-controlled/iu);
   assert.match(markup, /link text/u);
 });

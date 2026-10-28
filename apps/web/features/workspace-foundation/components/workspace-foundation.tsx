@@ -11,7 +11,7 @@ type WorkspaceFoundationProps = Readonly<{
 export const WorkspaceFoundation = ({ apiBaseUrl }: WorkspaceFoundationProps): ReactElement => (
   <PageShell>
     <PageHeader
-      description="The SQUID monorepo is running as a local-only document management demo. Authentication is intentionally deferred."
+      description="The local preview uses a demo owner. Configure Google authentication on the API to enable secure sign-in."
       eyebrow="Workspace ready"
       icon={<Activity aria-hidden="true" className="size-5" />}
       title="Your local workspace is ready."

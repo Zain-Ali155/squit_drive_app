@@ -7,6 +7,7 @@ export const driveFileTypes = [
 export const driveSortFields = ["name", "updatedAt", "sizeBytes"] as const;
 export const driveSortOrders = ["asc", "desc"] as const;
 export const MAX_DRIVE_FILE_SIZE = 50_000_000;
+export const MAX_DRIVE_STORAGE_QUOTA_BYTES = 1_000_000_000;
 
 export const driveNameSchema = z.string()
   .trim()
@@ -38,6 +39,7 @@ export const driveListQuerySchema = z.object({
   search: z.string().trim().min(1).max(200).optional(),
   favorites: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
   recent: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
+  trash: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   fileType: z.enum(driveFileTypes).optional(),
@@ -62,18 +64,25 @@ export const driveListQuerySchema = z.object({
     path: ["sortOrder"],
     message: "A sort field is required when a sort order is selected."
   })
-  .refine(({ favorites, recent }) => favorites !== true || recent !== true, {
-    path: ["recent"],
-    message: "Favorites and Recent cannot be selected together."
+  .refine(({ favorites, recent, trash }) => Number(favorites === true) + Number(recent === true) + Number(trash === true) <= 1, {
+    path: ["trash"],
+    message: "Drive collections cannot be selected together."
   })
-  .refine(({ parentId, search, favorites, recent }) =>
-    parentId === undefined || (search === undefined && favorites !== true && recent !== true), {
+  .refine(({ parentId, search, favorites, recent, trash }) =>
+    parentId === undefined || (search === undefined && favorites !== true && recent !== true && trash !== true), {
       path: ["parentId"],
-      message: "Folder scope cannot be combined with global search, Favorites, or Recent."
+      message: "Folder scope cannot be combined with global search, Favorites, Recent, or Trash."
+  })
+  .refine(({ trash, search, fileType, modifiedAfter, modifiedBefore, minSizeBytes, maxSizeBytes }) =>
+    trash !== true || (search === undefined && fileType === undefined && modifiedAfter === undefined &&
+      modifiedBefore === undefined && minSizeBytes === undefined && maxSizeBytes === undefined), {
+      path: ["trash"],
+      message: "Trash cannot be combined with other filters."
   });
 
 export const driveEntryIdSchema = z.uuid();
 export const driveFavoriteSchema = z.object({ isStarred: z.boolean() }).strict();
+export const driveShareTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
 
 export const driveUploadMetadataSchema = z.object({
   name: driveNameSchema,

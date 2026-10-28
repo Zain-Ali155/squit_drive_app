@@ -40,7 +40,7 @@ void test("unknown file types retain a clear generic visual fallback", (): void 
   assert.deepEqual(driveFileVisual("application/octet-stream", "backup.unknown"), {
     type: "generic",
     label: "Unknown file type",
-    badge: "FILE",
+    badge: "UNKN",
     iconClass: "text-muted-foreground",
     badgeClass: "bg-slate-100 text-slate-700",
     supportsThumbnail: false
@@ -62,34 +62,36 @@ void test("archive extensions share the archive glyph and retain their specific 
     const listingMarkup = renderToStaticMarkup(createElement(DriveFileVisual, props));
     assert.match(listingMarkup, /data-file-type="archive"/u, fileName);
     assert.match(listingMarkup, /text-orange-600/u, fileName);
-    assert.doesNotMatch(listingMarkup, /viewBox="0 0 24 28"/u, fileName);
+    assert.match(listingMarkup, /#d94b45/u, fileName);
   }
 });
 
-void test("listing renders matching type-specific document symbols", (): void => {
+void test("listing renders familiar app marks on document-style file icons", (): void => {
   const cases = [
-    ["report.final.PDF", "pdf", "text-red-600"],
-    ["report.final.DOC", "doc", "text-blue-600"],
-    ["report.final.DOCX", "docx", "text-blue-600"],
-    ["report.final.PPT", "ppt", "text-orange-600"],
-    ["report.final.PPTX", "pptx", "text-orange-600"],
-    ["report.final.XLS", "xls", "text-emerald-700"],
-    ["report.final.XLSX", "xlsx", "text-emerald-700"],
-    ["report.final.CSV", "csv", "text-green-700"],
-    ["report.final.TXT", "txt", "text-slate-600"]
+    ["report.final.PDF", "pdf", "PDF", "bg-red-600"],
+    ["report.final.DOC", "doc", "W", "bg-blue-700"],
+    ["report.final.DOCX", "docx", "W", "bg-blue-700"],
+    ["report.final.PPT", "ppt", "P", "bg-orange-600"],
+    ["report.final.PPTX", "pptx", "P", "bg-orange-600"],
+    ["report.final.XLS", "xls", "X", "bg-green-700"],
+    ["report.final.XLSX", "xlsx", "X", "bg-green-700"],
+    ["report.final.CSV", "csv", "X", "bg-green-700"],
+    ["report.final.TXT", "txt", "T", "bg-slate-600"]
   ] as const;
 
-  for (const [fileName, fileType, colorClass] of cases) {
+  for (const [fileName, fileType, mark, colorClass] of cases) {
     const fileProps = { fileName, mimeType: "application/octet-stream" };
     const listingMarkup = renderToStaticMarkup(createElement(DriveFileVisual, fileProps));
 
     assert.match(listingMarkup, new RegExp(`data-file-type="${fileType}"`, "u"), fileName);
     assert.match(listingMarkup, new RegExp(colorClass, "u"), fileName);
-    assert.doesNotMatch(listingMarkup, /<text|absolute bottom|bg-(red|blue|orange|emerald|green|slate)-100/u, fileName);
+    assert.match(listingMarkup, new RegExp(`data-file-mark="${fileType}"`, "u"), fileName);
+    assert.match(listingMarkup, new RegExp(`>${mark}<\\/span>`, "u"), fileName);
+    assert.doesNotMatch(listingMarkup, /<text/u, fileName);
   }
 });
 
-void test("unknown files retain the generic icon fallback", (): void => {
+void test("PDF files retain their document icon and show a type badge", (): void => {
   const fileProps = { fileName: "annual.pdf", mimeType: "application/pdf" };
   const listingMarkup = renderToStaticMarkup(createElement(DriveFileVisual, {
     ...fileProps,
@@ -98,15 +100,40 @@ void test("unknown files retain the generic icon fallback", (): void => {
   }));
 
   assert.match(listingMarkup, /data-file-type="pdf"/u);
-  assert.match(listingMarkup, /text-red-600/u);
-  assert.match(listingMarkup, /viewBox="0 0 24 28"/u);
-  assert.match(listingMarkup, /stroke="currentColor"/u);
-  assert.doesNotMatch(listingMarkup, /bg-red-100|absolute bottom|rounded-sm/u);
+  assert.match(listingMarkup, /bg-red-600/u);
+  assert.match(listingMarkup, /viewBox="0 0 32 36"/u);
+  assert.match(listingMarkup, /stroke="#94a3b8"/u);
+  assert.match(listingMarkup, /data-file-mark="pdf">PDF<\/span>/u);
 
   const fallbackMarkup = renderToStaticMarkup(createElement(DriveFileTypeIcon, { fileName: "backup.unknown" }));
-  assert.match(fallbackMarkup, /text-muted-foreground/u);
+  assert.match(fallbackMarkup, /bg-slate-500/u);
   assert.match(fallbackMarkup, /data-file-type="generic"/u);
+  assert.match(fallbackMarkup, />UNK<\/span>/u);
   assert.doesNotMatch(fallbackMarkup, /<text/u);
+});
+
+void test("all accepted audio, video, code, and OpenDocument extensions get recognizable icons and labels", (): void => {
+  const cases = [
+    ["application/octet-stream", "track.mp3", "audio", "♪", "bg-purple-700"],
+    ["audio/wav", "recording.wav", "audio", "♪", "bg-purple-700"],
+    ["application/octet-stream", "clip.mkv", "video", "▶", "bg-rose-600"],
+    ["application/octet-stream", "source.tsx", "code", "</>", "bg-cyan-700"],
+    ["text/plain", "config.yaml", "code", "</>", "bg-cyan-700"],
+    ["application/vnd.oasis.opendocument.text", "letter.odt", "odt", "T", "bg-slate-600"],
+    ["application/vnd.oasis.opendocument.spreadsheet", "ledger.ods", "ods", "X", "bg-green-700"],
+    ["application/vnd.oasis.opendocument.presentation", "briefing.odp", "odp", "P", "bg-orange-600"]
+  ] as const;
+
+  for (const [mimeType, fileName, type, mark, color] of cases) {
+    const visual = driveFileVisual(mimeType, fileName);
+    assert.equal(visual.type, type, fileName);
+    const markup = renderToStaticMarkup(createElement(DriveFileVisual, { mimeType, fileName }));
+    assert.match(markup, new RegExp(`data-file-type="${type}"`, "u"), fileName);
+    assert.match(markup, new RegExp(`data-file-mark="${type}"`, "u"), fileName);
+    const renderedMark = mark === "</>" ? "&lt;/&gt;" : mark;
+    assert.match(markup, new RegExp(`>${renderedMark}<\\/span>`, "u"), fileName);
+    assert.match(markup, new RegExp(color, "u"), fileName);
+  }
 });
 
 void test("Workspace listing renders PNG thumbnails without document overlays for extension edge cases", (): void => {
@@ -140,7 +167,7 @@ void test("Workspace listing uses a single image glyph when image thumbnails are
     const fallbackMarkup = renderToStaticMarkup(createElement(DriveFileTypeIcon, { fileName, mimeType }));
 
     assert.match(fallbackMarkup, /<svg/u, fileName);
-    assert.match(fallbackMarkup, /<rect/u, fileName);
+    assert.match(fallbackMarkup, /data-file-mark="image">IMG<\/span>/u, fileName);
     assert.doesNotMatch(fallbackMarkup, /<text|viewBox="0 0 24 28"|clip-path/u, fileName);
   }
 });

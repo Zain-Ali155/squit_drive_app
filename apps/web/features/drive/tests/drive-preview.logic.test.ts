@@ -21,6 +21,9 @@ void test("Drive preview policy allows passive formats and excludes active or un
   assert.equal(drivePreviewKind("text/plain; charset=utf-8"), "text");
   assert.equal(drivePreviewKind("text/csv; charset=utf-8"), "csv");
   assert.equal(drivePreviewKind("application/octet-stream", "ledger.CSV"), "csv");
+  assert.equal(drivePreviewKind("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), "xlsx");
+  assert.equal(drivePreviewKind("application/octet-stream", "budget.xlsx"), "xlsx");
+  assert.equal(drivePreviewKind("application/vnd.ms-excel", "budget.xls"), "xlsx");
   assert.equal(normalizeDriveMimeType("image/svg+xml"), undefined);
   assert.equal(drivePreviewKind("text/html"), undefined);
   assert.equal(drivePreviewKind("text/html", "unsafe.pptx"), undefined);
@@ -47,8 +50,8 @@ void test("opening an entry selects folder navigation, supported preview, or an 
   assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/octet-stream", name: "deck.pptx" }), "preview");
   assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/msword" }), "unsupported");
   assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/vnd.ms-powerpoint", name: "deck.ppt" }), "unsupported");
-  assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "budget.xlsx" }), "unsupported");
-  assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/octet-stream", name: "budget.xlsx" }), "unsupported");
+  assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name: "budget.xlsx" }), "preview");
+  assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/octet-stream", name: "budget.xlsx" }), "preview");
   assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "application/vnd.rar", name: "backup.rar" }), "unsupported");
   assert.equal(driveEntryOpenAction({ kind: "file", mimeType: "image/svg+xml" }), "unsupported");
 });

@@ -1,5 +1,7 @@
 export {
   createDriveRepository,
+  DriveShareModel,
+  driveShareSchema,
   createOwnedDeletionEntryFilter,
   createOwnedChildrenFilter,
   createOwnedEntryFilter,

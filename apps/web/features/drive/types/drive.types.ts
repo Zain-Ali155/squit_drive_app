@@ -1,4 +1,4 @@
-export type DrivePreviewKind = "image" | "pdf" | "docx" | "pptx" | "text" | "csv";
+export type DrivePreviewKind = "image" | "pdf" | "docx" | "pptx" | "text" | "csv" | "xlsx";
 
 export type DriveUploadProgress = Readonly<{ loaded: number; total: number }>;
 

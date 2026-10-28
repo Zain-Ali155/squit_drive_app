@@ -4,6 +4,7 @@ export type ApiDriveEntry = Readonly<{
   name: string;
   parentId: string | null;
   isStarred: boolean;
+  state?: "trashed" | "deletion_pending";
   mimeType?: string;
   sizeBytes?: number;
   createdAt: string;
@@ -16,7 +17,30 @@ export type ApiDriveListResponse = Readonly<{
   parentId: string;
 }>;
 
-export type ApiDriveStorageUsage = Readonly<{ usedBytes: number }>;
+export type ApiDriveStorageUsage = Readonly<{ usedBytes: number; totalBytes: number }>;
+
+export type ApiDriveShare = Readonly<{
+  id: string;
+  accessType: "link" | "email";
+  recipientEmail?: string;
+  expiresAt?: string;
+  createdAt: string;
+}>;
+
+export type ApiDriveShareListResponse = Readonly<{ shares: readonly ApiDriveShare[] }>;
+
+export type ApiDriveShareLinkResponse = Readonly<{
+  id: string;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+}>;
+
+export type ApiDriveSharedFile = Readonly<{
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}>;
 
 export type ApiDriveFileType =
   | "folder"
@@ -37,6 +61,7 @@ export type ApiDriveListQuery = Readonly<{
   search?: string;
   favorites?: boolean;
   recent?: boolean;
+  trash?: boolean;
   page?: number;
   pageSize?: number;
   fileType?: ApiDriveFileType;

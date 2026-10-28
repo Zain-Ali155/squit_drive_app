@@ -1,22 +1,82 @@
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { ERROR_CODES, ERROR_MESSAGES, HTTP_STATUS } from "../../constants/index.js";
 import { createApplicationError } from "../../errors/index.js";
 import type { ApplicationError } from "../../errors/types.js";
 import type { Logger } from "@workspace/logging";
 import type { Readable } from "node:stream";
 import type { DriveEntryRecord, DrivePage } from "./drive.types.js";
+import type { DriveShareRecord } from "./drive.types.js";
 import type { DriveRepository } from "./repositories/index.js";
 import { createValidatedUploadStream } from "./drive.upload-validation.js";
 import type { SupabaseStorageIntegration } from "./integrations/drive.integration.js";
-import { normalizeDriveName } from "./drive.validation.js";
-
-export const localDemoOwnerId = "local-demo-owner";
+import { driveShareTokenSchema, normalizeDriveName, MAX_DRIVE_STORAGE_QUOTA_BYTES } from "./drive.validation.js";
 
 type DriveServiceDependencies = Readonly<{
   repository: DriveRepository;
   logger: Logger;
-  ownerId?: string;
+  ownerId: string;
+  recipientEmail?: string;
   storage?: SupabaseStorageIntegration;
+  shareLinkService?: DriveShareLinkService;
 }>;
+
+const shareLinkLifetimeMs = 7 * 24 * 60 * 60 * 1_000;
+const storageReservationLifetimeMs = 60 * 60 * 1_000;
+
+type DriveShareLinkServiceDependencies = Readonly<{
+  repository: DriveRepository;
+  storage?: SupabaseStorageIntegration;
+  now?: () => Date;
+}>;
+
+export type DriveShareLinkService = Readonly<{
+  create: (ownerId: string, entryId: string) => Promise<Readonly<{ share: DriveShareRecord; token: string; expiresAt: Date }>>;
+  resolve: (token: string) => Promise<DriveEntryRecord>;
+  download: (token: string) => Promise<Readonly<{
+    entry: DriveEntryRecord; body: Readable; contentType: string | null;
+  }>>;
+}>;
+
+export const createDriveShareLinkService = ({ repository, storage, now = () => new Date() }: DriveShareLinkServiceDependencies): DriveShareLinkService => {
+  const resolveShare = async (token: string): Promise<Readonly<{ share: DriveShareRecord; entry: DriveEntryRecord }>> => {
+    if (!driveShareTokenSchema.safeParse(token).success) throw notFound();
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const share = await repository.findShareByTokenHash(tokenHash);
+    if (!share?.expiresAt || share.expiresAt.getTime() <= now().getTime()) throw notFound();
+    const entry = await repository.findOwnedEntry(share.ownerId, share.entryId);
+    if (!entry || entry.kind !== "file" || !entry.storageKey) throw notFound();
+    return Object.freeze({ share, entry });
+  };
+
+  return Object.freeze({
+    create: async (ownerId: string, entryId: string) => {
+      const entry = await repository.findOwnedEntry(ownerId, entryId);
+      if (!entry || entry.kind !== "file") throw notFound();
+      if (!storage || !await storage.verifyPrivateBucket()) throw unavailable();
+      const token = randomBytes(32).toString("base64url");
+      const expiresAt = new Date(now().getTime() + shareLinkLifetimeMs);
+      const share = await repository.createOrRotateLinkShare({
+        _id: randomUUID(), ownerId, entryId, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt
+      });
+      return Object.freeze({ share, token, expiresAt });
+    },
+    resolve: async (token: string) => (await resolveShare(token)).entry,
+    download: async (token: string) => {
+      const { entry } = await resolveShare(token);
+      if (!storage || !await storage.verifyPrivateBucket()) throw unavailable();
+      const storageKey = entry.storageKey;
+      if (!storageKey) throw notFound();
+      let object: Awaited<ReturnType<SupabaseStorageIntegration["downloadObject"]>>;
+      try {
+        object = await storage.downloadObject(storageKey);
+      } catch {
+        throw unavailable();
+      }
+      if (!object) throw notFound();
+      return Object.freeze({ entry, body: object.body, contentType: object.contentType });
+    }
+  });
+};
 
 const notFound = (): ApplicationError => createApplicationError({
   code: ERROR_CODES.driveEntryNotFound,
@@ -50,7 +110,7 @@ export type DriveService = Readonly<{
   list: (options: DrivePage & Readonly<{ parentId?: string }>) => Promise<Readonly<{
     entries: readonly DriveEntryRecord[]; total: number; parentId: string;
   }>>;
-  storageUsage: () => Promise<number>;
+  storageUsage: () => Promise<Readonly<{ usedBytes: number; totalBytes: number }>>;
   recordFileAccess: (entryId: string) => Promise<void>;
   setFavorite: (entryId: string, isStarred: boolean) => Promise<DriveEntryRecord>;
   createFolder: (input: Readonly<{ name: string; parentId?: string }>) => Promise<DriveEntryRecord>;
@@ -59,9 +119,17 @@ export type DriveService = Readonly<{
   uploadFile: (input: Readonly<{ source: Readable; name: string; contentType: string; contentLength: number; parentId?: string }>) => Promise<DriveEntryRecord>;
   downloadFile: (entryId: string) => Promise<Readonly<{ entry: DriveEntryRecord; body: Readable; contentType: string | null }>>;
   deleteEntry: (entryId: string) => Promise<void>;
+  restoreEntry: (entryId: string) => Promise<DriveEntryRecord>;
+  permanentlyDeleteEntry: (entryId: string) => Promise<void>;
+  createShareLink: (entryId: string) => Promise<Readonly<{ share: DriveShareRecord; token: string; expiresAt: Date }>>;
+  listShares: (entryId: string) => Promise<readonly DriveShareRecord[]>;
+  revokeShare: (entryId: string, shareId: string) => Promise<void>;
+  downloadSharedFile: (shareId: string) => Promise<Readonly<{
+    entry: DriveEntryRecord; body: Readable; contentType: string | null;
+  }>>;
 }>;
 
-export const createDriveService = ({ repository, logger, ownerId = localDemoOwnerId, storage }: DriveServiceDependencies): DriveService => {
+export const createDriveService = ({ repository, logger, ownerId, recipientEmail, storage, shareLinkService = createDriveShareLinkService({ repository, ...(storage ? { storage } : {}) }) }: DriveServiceDependencies): DriveService => {
   const requireFolder = async (id: string): Promise<DriveEntryRecord> => {
     const entry = await repository.findOwnedEntry(ownerId, id);
     if (!entry || entry.kind !== "folder") throw notFound();
@@ -71,12 +139,15 @@ export const createDriveService = ({ repository, logger, ownerId = localDemoOwne
   const list = async ({ parentId, ...page }: DrivePage & Readonly<{ parentId?: string }>) => {
     const root = await repository.ensureRoot(ownerId);
     const actualParentId = parentId ?? root._id;
-    if (!page.favorites && !page.recent) await requireFolder(actualParentId);
+    if (!page.favorites && !page.recent && !page.trash) await requireFolder(actualParentId);
     const result = await repository.listOwnedEntries(ownerId, actualParentId, page);
     return Object.freeze({ ...result, parentId: actualParentId });
   };
 
-  const storageUsage = (): Promise<number> => repository.getOwnedStorageUsage(ownerId);
+  const storageUsage = async (): Promise<Readonly<{ usedBytes: number; totalBytes: number }>> => Object.freeze({
+    usedBytes: await repository.getOwnedStorageUsage(ownerId),
+    totalBytes: MAX_DRIVE_STORAGE_QUOTA_BYTES
+  });
 
   const recordFileAccess = async (entryId: string): Promise<void> => {
     const recorded = await repository.recordOwnedFileAccess(ownerId, entryId, new Date());
@@ -183,6 +254,36 @@ export const createDriveService = ({ repository, logger, ownerId = localDemoOwne
     } catch {
       throw rejectedUpload();
     }
+    let usedBytes: number;
+    try {
+      usedBytes = await repository.getOwnedStorageUsage(ownerId);
+    } catch {
+      transfer.cancel();
+      throw unavailable();
+    }
+    const reservationId = randomUUID();
+    let reserved: boolean;
+    try {
+      reserved = await repository.reserveOwnedStorageQuota(
+        ownerId,
+        reservationId,
+        input.contentLength,
+        usedBytes,
+        new Date(Date.now() + storageReservationLifetimeMs)
+      );
+    } catch {
+      transfer.cancel();
+      throw unavailable();
+    }
+    if (!reserved) {
+      transfer.cancel();
+      throw createApplicationError({
+        code: ERROR_CODES.driveStorageQuotaExceeded,
+        message: ERROR_MESSAGES.driveStorageQuotaExceeded,
+        status: HTTP_STATUS.payloadTooLarge
+      });
+    }
+    try {
     const objectKey = crypto.randomUUID();
     const removePartialObject = async (stage: string, metadataEntryId?: string): Promise<void> => {
       try {
@@ -262,6 +363,18 @@ export const createDriveService = ({ repository, logger, ownerId = localDemoOwne
       if (isDuplicateKeyError(error)) throw conflict("An entry with this name already exists in the folder.");
       throw error;
     }
+    } finally {
+      try {
+        await repository.releaseOwnedStorageQuota(ownerId, reservationId);
+      } catch (error) {
+        logger.warn("Drive storage quota reservation will expire automatically.", {
+          event: "drive.storage.quota_reservation_release_failed",
+          ownerId,
+          reservationId,
+          errorType: error instanceof Error ? error.name : "unknown"
+        });
+      }
+    }
   };
 
   const downloadFile = async (entryId: string): Promise<Readonly<{
@@ -281,27 +394,62 @@ export const createDriveService = ({ repository, logger, ownerId = localDemoOwne
   };
 
   const deleteEntry = async (entryId: string): Promise<void> => {
-    let entry = await repository.findOwnedEntryForDeletion(ownerId, entryId);
+    const entry = await repository.findOwnedEntry(ownerId, entryId);
     if (!entry || entry._id === (await repository.ensureRoot(ownerId))._id) throw notFound();
-    if (entry.kind === "folder") {
-      if (entry.state !== "active") throw notFound();
-      if (await repository.hasOwnedChildren(ownerId, entryId)) throw conflict("A non-empty folder cannot be deleted.");
-      if (!await repository.deleteOwnedEntry(ownerId, entryId)) throw notFound();
-      return;
+    if (entry.kind === "folder" && await repository.hasOwnedChildren(ownerId, entryId)) {
+      throw conflict("A non-empty folder cannot be moved to Trash.");
     }
-    let storageKey = entry.storageKey;
-    if (!storageKey || !storage || !await storage.verifyPrivateBucket()) throw unavailable();
-    if (entry.state === "active") {
-      const pending = await repository.updateOwnedEntry(ownerId, entryId, { state: "pending_delete" });
-      if (pending) {
-        entry = pending;
-      } else {
-        const retry = await repository.findOwnedEntryForDeletion(ownerId, entryId);
-        if (!retry || retry.state !== "pending_delete" || retry.kind !== "file" || !retry.storageKey) throw notFound();
-        entry = retry;
-        storageKey = retry.storageKey;
+    if (!await repository.moveOwnedEntryToTrash(ownerId, entryId, new Date())) throw notFound();
+    if (entry.kind === "file") {
+      try {
+        await repository.deleteOwnedEntryShares(ownerId, entryId);
+      } catch (cleanupError) {
+        logger.warn("Drive share records remain while the file is in Trash; restore will retry cleanup.", {
+          event: "drive.trash.share_cleanup_failed",
+          ownerId,
+          entryId,
+          errorType: cleanupError instanceof Error ? cleanupError.name : "unknown"
+        });
       }
     }
+  };
+
+  const restoreEntry = async (entryId: string): Promise<DriveEntryRecord> => {
+    const entry = await repository.findOwnedEntryForDeletion(ownerId, entryId);
+    if (!entry || entry.state !== "trashed" || entry._id === (await repository.ensureRoot(ownerId))._id) throw notFound();
+    const parent = entry.parentId ? await repository.findOwnedEntry(ownerId, entry.parentId) : null;
+    if (!parent || parent.kind !== "folder") {
+      throw conflict("Restore the parent folder before restoring this entry.");
+    }
+    if (entry.kind === "file") {
+      try {
+        await repository.deleteOwnedEntryShares(ownerId, entryId);
+      } catch {
+        throw unavailable();
+      }
+    }
+    try {
+      const restored = await repository.restoreOwnedEntry(ownerId, entryId);
+      if (!restored) throw notFound();
+      return restored;
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw conflict("An entry with this name already exists in its folder. Rename or remove that item before restoring.");
+      throw error;
+    }
+  };
+
+  const permanentlyDeleteEntry = async (entryId: string): Promise<void> => {
+    const entry = await repository.findOwnedEntryForDeletion(ownerId, entryId);
+    if (!entry || (entry.state !== "trashed" && entry.state !== "pending_delete") ||
+      entry._id === (await repository.ensureRoot(ownerId))._id) throw notFound();
+    if (entry.kind === "folder") {
+      if (await repository.hasOwnedChildren(ownerId, entryId)) throw conflict("A folder with items in Trash cannot be permanently deleted.");
+      if (!await repository.deleteOwnedEntry(ownerId, entryId)) throw unavailable();
+      return;
+    }
+    const pending = await repository.markOwnedEntryPendingDelete(ownerId, entryId);
+    if (!pending || pending.kind !== "file" || !pending.storageKey || !storage || !await storage.verifyPrivateBucket()) throw unavailable();
+    const storageKey = pending.storageKey;
     try {
       await storage.removeObject(storageKey);
     } catch {
@@ -310,7 +458,51 @@ export const createDriveService = ({ repository, logger, ownerId = localDemoOwne
     if (!await repository.deleteOwnedEntry(ownerId, entryId) && await repository.findOwnedEntryForDeletion(ownerId, entryId)) {
       throw unavailable();
     }
+    try {
+      await repository.deleteOwnedEntryShares(ownerId, entryId);
+    } catch (cleanupError) {
+      logger.warn("Drive sharing records could not be cleaned after permanent deletion.", {
+        event: "drive.share.cleanup_failed",
+        ownerId,
+        entryId,
+        errorType: cleanupError instanceof Error ? cleanupError.name : "unknown"
+      });
+    }
   };
 
-  return Object.freeze({ folderPath, list, storageUsage, recordFileAccess, setFavorite, createFolder, updateEntry, deleteFolder, uploadFile, downloadFile, deleteEntry });
+  const listShares = async (entryId: string): Promise<readonly DriveShareRecord[]> => {
+    const entry = await repository.findOwnedEntry(ownerId, entryId);
+    if (!entry || entry.kind !== "file") throw notFound();
+    return repository.findSharesForOwnedEntry(ownerId, entryId);
+  };
+
+  const revokeShare = async (entryId: string, shareId: string): Promise<void> => {
+    const entry = await repository.findOwnedEntry(ownerId, entryId);
+    if (!entry || entry.kind !== "file") throw notFound();
+    if (!await repository.deleteOwnedShare(ownerId, entryId, shareId)) throw notFound();
+  };
+
+  const downloadSharedFile = async (shareId: string) => {
+    if (!recipientEmail) throw notFound();
+    const share = await repository.findShareForRecipient(shareId, recipientEmail.trim().toLowerCase());
+    if (!share) throw notFound();
+    const entry = await repository.findOwnedEntry(share.ownerId, share.entryId);
+    if (!entry || entry.kind !== "file" || !entry.storageKey || !storage) throw notFound();
+    if (!await storage.verifyPrivateBucket()) throw unavailable();
+    let object: Awaited<ReturnType<SupabaseStorageIntegration["downloadObject"]>>;
+    try {
+      object = await storage.downloadObject(entry.storageKey);
+    } catch {
+      throw unavailable();
+    }
+    if (!object) throw notFound();
+    return Object.freeze({ entry, body: object.body, contentType: object.contentType });
+  };
+
+  return Object.freeze({
+    folderPath, list, storageUsage, recordFileAccess, setFavorite, createFolder, updateEntry, deleteFolder,
+    uploadFile, downloadFile, deleteEntry, restoreEntry, permanentlyDeleteEntry,
+    createShareLink: (entryId: string) => shareLinkService.create(ownerId, entryId),
+    listShares, revokeShare, downloadSharedFile
+  });
 };

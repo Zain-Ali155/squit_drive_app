@@ -1,7 +1,7 @@
 import type { LogLevel } from "@workspace/logging";
 import type { ApiEnvironment } from "@workspace/types";
 
-export type ApiConfig = Readonly<{
+type ApiConfigBase = Readonly<{
   environment: ApiEnvironment;
   host: string;
   port: number;
@@ -12,3 +12,14 @@ export type ApiConfig = Readonly<{
   supabaseSecretKey?: string;
   logLevel: LogLevel;
 }>;
+
+export type ApiConfig = ApiConfigBase & (
+  | Readonly<{ authMode: "local-demo" }>
+  | Readonly<{
+    authMode: "google";
+    mongodbUri: string;
+    googleClientId: string;
+    googleClientSecret: string;
+    googleRedirectUri: string;
+  }>
+);

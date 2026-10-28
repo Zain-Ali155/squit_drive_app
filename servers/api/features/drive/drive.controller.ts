@@ -1,10 +1,11 @@
 import type { Request, Response } from "express";
-import type { ApiDriveEntry, ApiDriveFolderPathResponse, ApiDriveListResponse, ApiDriveStorageUsage } from "@workspace/types";
+import type { ApiDriveEntry, ApiDriveFolderPathResponse, ApiDriveListResponse, ApiDriveShare, ApiDriveShareLinkResponse, ApiDriveShareListResponse, ApiDriveSharedFile, ApiDriveStorageUsage } from "@workspace/types";
 import { pipeline } from "node:stream/promises";
 import { ERROR_CODES, ERROR_MESSAGES, HTTP_STATUS } from "../../constants/index.js";
 import { createApplicationError } from "../../errors/index.js";
-import { driveEntryIdSchema, createFolderSchema, driveFavoriteSchema, driveListQuerySchema, driveUploadMetadataSchema, updateEntrySchema } from "./drive.validation.js";
+import { driveEntryIdSchema, driveShareTokenSchema, createFolderSchema, driveFavoriteSchema, driveListQuerySchema, driveUploadMetadataSchema, updateEntrySchema } from "./drive.validation.js";
 import type { DriveService } from "./drive.service.js";
+import type { DriveShareLinkService } from "./drive.service.js";
 
 type DriveControllerDependencies = Readonly<{ service: DriveService }>;
 
@@ -14,6 +15,8 @@ const toApiDriveEntry = (entry: Awaited<ReturnType<DriveService["createFolder"]>
   name: entry.name,
   parentId: entry.parentId,
   isStarred: entry.isStarred ?? false,
+  ...(entry.state === "trashed" ? { state: "trashed" as const } : {}),
+  ...(entry.state === "pending_delete" ? { state: "deletion_pending" as const } : {}),
   ...(entry.mimeType ? { mimeType: entry.mimeType } : {}),
   ...(entry.sizeBytes !== undefined ? { sizeBytes: entry.sizeBytes } : {}),
   createdAt: entry.createdAt.toISOString(),
@@ -34,6 +37,7 @@ export const createDriveController = ({ service }: DriveControllerDependencies) 
       ...(typeof query.search === "string" ? { search: query.search } : {}),
       ...(query.favorites === true ? { favorites: true } : {}),
       ...(query.recent === true ? { recent: true } : {}),
+      ...(query.trash === true ? { trash: true } : {}),
       ...(typeof query.parentId === "string" ? { parentId: query.parentId } : {}),
       ...(query.fileType ? { fileType: query.fileType } : {}),
       ...(query.modifiedAfter ? { modifiedAfter: query.modifiedAfter } : {}),
@@ -49,7 +53,7 @@ export const createDriveController = ({ service }: DriveControllerDependencies) 
     response.status(HTTP_STATUS.ok).json(body);
   },
   storageUsage: async (_request: Request, response: Response): Promise<void> => {
-    const body: ApiDriveStorageUsage = { usedBytes: await service.storageUsage() };
+    const body: ApiDriveStorageUsage = await service.storageUsage();
     response.status(HTTP_STATUS.ok).json(body);
   },
   createFolder: async (request: Request, response: Response): Promise<void> => {
@@ -83,6 +87,15 @@ export const createDriveController = ({ service }: DriveControllerDependencies) 
   deleteEntry: async (request: Request, response: Response): Promise<void> => {
     const entryId = driveEntryIdSchema.parse(request.params.id);
     await service.deleteEntry(entryId);
+    response.status(HTTP_STATUS.noContent).end();
+  },
+  restoreEntry: async (request: Request, response: Response): Promise<void> => {
+    const entryId = driveEntryIdSchema.parse(request.params.id);
+    response.status(HTTP_STATUS.ok).json(toApiDriveEntry(await service.restoreEntry(entryId)));
+  },
+  permanentlyDeleteEntry: async (request: Request, response: Response): Promise<void> => {
+    const entryId = driveEntryIdSchema.parse(request.params.id);
+    await service.permanentlyDeleteEntry(entryId);
     response.status(HTTP_STATUS.noContent).end();
   },
   uploadFile: async (request: Request, response: Response): Promise<void> => {
@@ -120,6 +133,83 @@ export const createDriveController = ({ service }: DriveControllerDependencies) 
     response.setHeader("Content-Length", String(file.entry.sizeBytes ?? 0));
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("Cache-Control", "no-store");
+    await pipeline(file.body, response);
+  },
+  createShareLink: async (request: Request, response: Response): Promise<void> => {
+    const entryId = driveEntryIdSchema.parse(request.params.id);
+    const { share, token, expiresAt } = await service.createShareLink(entryId);
+    const result: ApiDriveShareLinkResponse = {
+      id: share._id,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      createdAt: share.createdAt.toISOString()
+    };
+    response.setHeader("Cache-Control", "no-store");
+    response.status(HTTP_STATUS.created).json(result);
+  },
+  listShares: async (request: Request, response: Response): Promise<void> => {
+    const entryId = driveEntryIdSchema.parse(request.params.id);
+    const shares: ApiDriveShareListResponse = {
+      shares: (await service.listShares(entryId)).flatMap((share): ApiDriveShare[] => {
+        if (share.tokenHash) return [{
+          id: share._id,
+          accessType: "link",
+          ...(share.expiresAt ? { expiresAt: share.expiresAt.toISOString() } : {}),
+          createdAt: share.createdAt.toISOString()
+        }];
+        if (share.recipientEmail) return [{
+          id: share._id,
+          accessType: "email",
+          recipientEmail: share.recipientEmail,
+          createdAt: share.createdAt.toISOString()
+        }];
+        return [];
+      })
+    };
+    response.status(HTTP_STATUS.ok).json(shares);
+  },
+  revokeShare: async (request: Request, response: Response): Promise<void> => {
+    const entryId = driveEntryIdSchema.parse(request.params.id);
+    const shareId = driveEntryIdSchema.parse(request.params.shareId);
+    await service.revokeShare(entryId, shareId);
+    response.status(HTTP_STATUS.noContent).end();
+  },
+  downloadSharedFile: async (request: Request, response: Response): Promise<void> => {
+    const shareId = driveEntryIdSchema.parse(request.params.id);
+    const file = await service.downloadSharedFile(shareId);
+    response.setHeader("Content-Type", file.entry.mimeType ?? file.contentType ?? "application/octet-stream");
+    response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file.entry.name)}`);
+    response.setHeader("Content-Length", String(file.entry.sizeBytes ?? 0));
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "no-store");
+    await pipeline(file.body, response);
+  }
+});
+
+type DrivePublicShareControllerDependencies = Readonly<{ service: DriveShareLinkService }>;
+
+export const createDrivePublicShareController = ({ service }: DrivePublicShareControllerDependencies) => Object.freeze({
+  resolve: async (request: Request, response: Response): Promise<void> => {
+    const token = driveShareTokenSchema.parse(request.get("authorization")?.replace(/^Bearer\s+/iu, "") ?? "");
+    const entry = await service.resolve(token);
+    const result: ApiDriveSharedFile = {
+      name: entry.name,
+      mimeType: entry.mimeType ?? "application/octet-stream",
+      sizeBytes: entry.sizeBytes ?? 0
+    };
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    response.status(HTTP_STATUS.ok).json(result);
+  },
+  download: async (request: Request, response: Response): Promise<void> => {
+    const token = driveShareTokenSchema.parse(request.get("authorization")?.replace(/^Bearer\s+/iu, "") ?? "");
+    const file = await service.download(token);
+    response.setHeader("Content-Type", "application/octet-stream");
+    response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file.entry.name)}`);
+    response.setHeader("Content-Length", String(file.entry.sizeBytes ?? 0));
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Referrer-Policy", "no-referrer");
     await pipeline(file.body, response);
   }
 });

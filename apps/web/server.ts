@@ -1,6 +1,10 @@
-import { createServer, type RequestListener, type Server } from "node:http";
+import { createServer, type IncomingMessage, type RequestListener, type Server } from "node:http";
+import { createConnection } from "node:net";
+import type { Duplex } from "node:stream";
 import next from "next";
 import { pathToFileURL } from "node:url";
+
+type UpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
 
 const listen = (server: Server, host: string, port: number): Promise<void> => new Promise((resolve, reject) => {
   const onError = (error: Error): void => reject(error);
@@ -19,13 +23,44 @@ const close = (server: Server): Promise<void> => new Promise((resolve, reject) =
   server.close((error) => error ? reject(error) : resolve());
 });
 
-export const listenOnLoopbackAddresses = async (handler: RequestListener, requestedPort: number) => {
-  const ipv4Server = createServer(handler);
+const forwardIpv6UpgradeToIpv4 = (port: number): UpgradeHandler => (request, socket, head) => new Promise((resolve) => {
+  const upstream = createConnection({ host: "127.0.0.1", port });
+  const headers = Array.from({ length: Math.floor(request.rawHeaders.length / 2) }, (_, index) =>
+    `${request.rawHeaders[index * 2]}: ${request.rawHeaders[index * 2 + 1]}`
+  ).join("\r\n");
+
+  upstream.once("connect", () => {
+    upstream.write(`${request.method ?? "GET"} ${request.url ?? "/"} HTTP/${request.httpVersion}\r\n${headers}\r\n\r\n`);
+    if (head.length > 0) upstream.write(head);
+    socket.pipe(upstream);
+    upstream.pipe(socket);
+    resolve();
+  });
+  upstream.once("error", () => {
+    socket.destroy();
+    resolve();
+  });
+  socket.once("error", () => upstream.destroy());
+  socket.once("close", () => upstream.destroy());
+  upstream.once("close", () => socket.destroy());
+});
+
+export const listenOnLoopbackAddresses = async (
+  handler: RequestListener,
+  requestedPort: number,
+  upgradeHandler?: UpgradeHandler,
+  primaryServer?: Server
+) => {
+  const ipv4Server = primaryServer ?? createServer();
+  ipv4Server.on("request", handler);
   const ipv6Server = createServer(handler);
+  if (upgradeHandler) ipv4Server.on("upgrade", upgradeHandler);
   try {
     await listen(ipv4Server, "127.0.0.1", requestedPort);
     const address = ipv4Server.address();
     if (!address || typeof address === "string") throw new Error("The web server did not report its loopback address.");
+    if (primaryServer) ipv6Server.on("upgrade", forwardIpv6UpgradeToIpv4(address.port));
+    else if (upgradeHandler) ipv6Server.on("upgrade", upgradeHandler);
     await listen(ipv6Server, "::1", address.port);
     return Object.freeze({
       port: address.port,
@@ -46,11 +81,12 @@ const start = async (): Promise<void> => {
     throw new Error("PORT must be an integer between 1 and 65535.");
   }
 
-  const app = next({ dev, hostname: "127.0.0.1", port });
+  const ipv4Server = createServer();
+  const app = next({ dev, hostname: "127.0.0.1", port, httpServer: ipv4Server });
   await app.prepare();
   let server: Awaited<ReturnType<typeof listenOnLoopbackAddresses>>;
   try {
-    server = await listenOnLoopbackAddresses(app.getRequestHandler(), port);
+    server = await listenOnLoopbackAddresses(app.getRequestHandler(), port, undefined, ipv4Server);
   } catch (cause) {
     await app.close();
     throw cause;

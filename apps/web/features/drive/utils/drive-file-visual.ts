@@ -1,4 +1,4 @@
-export type DriveFileVisualType = "pdf" | "pptx" | "ppt" | "docx" | "doc" | "xlsx" | "xls" | "csv" | "txt" | "image" | "archive" | "video" | "generic";
+export type DriveFileVisualType = "pdf" | "pptx" | "ppt" | "docx" | "doc" | "xlsx" | "xls" | "csv" | "txt" | "odt" | "ods" | "odp" | "image" | "archive" | "video" | "audio" | "code" | "generic";
 
 export type DriveFileVisual = Readonly<{
   type: DriveFileVisualType;
@@ -19,9 +19,14 @@ const driveFileVisuals: Readonly<Record<DriveFileVisualType, DriveFileVisual>> =
   xls: Object.freeze({ type: "xls", label: "Excel spreadsheet", badge: "XLS", iconClass: "text-emerald-700", badgeClass: "bg-emerald-100 text-emerald-800", supportsThumbnail: false }),
   csv: Object.freeze({ type: "csv", label: "CSV spreadsheet", badge: "CSV", iconClass: "text-green-700", badgeClass: "bg-green-100 text-green-800", supportsThumbnail: false }),
   txt: Object.freeze({ type: "txt", label: "Plain text", badge: "TXT", iconClass: "text-slate-600", badgeClass: "bg-slate-100 text-slate-700", supportsThumbnail: false }),
+  odt: Object.freeze({ type: "odt", label: "OpenDocument text document", badge: "ODT", iconClass: "text-violet-700", badgeClass: "bg-violet-100 text-violet-800", supportsThumbnail: false }),
+  ods: Object.freeze({ type: "ods", label: "OpenDocument spreadsheet", badge: "ODS", iconClass: "text-green-700", badgeClass: "bg-green-100 text-green-800", supportsThumbnail: false }),
+  odp: Object.freeze({ type: "odp", label: "OpenDocument presentation", badge: "ODP", iconClass: "text-orange-700", badgeClass: "bg-orange-100 text-orange-800", supportsThumbnail: false }),
   image: Object.freeze({ type: "image", label: "Image file", badge: "IMG", iconClass: "text-violet-600", badgeClass: "bg-violet-100 text-violet-800", supportsThumbnail: false }),
   archive: Object.freeze({ type: "archive", label: "Archive file", badge: "ZIP", iconClass: "text-orange-600", badgeClass: "bg-orange-100 text-orange-800", supportsThumbnail: false }),
-  video: Object.freeze({ type: "video", label: "Video file", badge: "VID", iconClass: "text-rose-600", badgeClass: "bg-rose-100 text-rose-800", supportsThumbnail: false }),
+  video: Object.freeze({ type: "video", label: "Video file", badge: "VIDEO", iconClass: "text-rose-600", badgeClass: "bg-rose-100 text-rose-800", supportsThumbnail: false }),
+  audio: Object.freeze({ type: "audio", label: "Audio file", badge: "AUDIO", iconClass: "text-purple-700", badgeClass: "bg-purple-100 text-purple-800", supportsThumbnail: false }),
+  code: Object.freeze({ type: "code", label: "Code or structured text file", badge: "CODE", iconClass: "text-cyan-700", badgeClass: "bg-cyan-100 text-cyan-800", supportsThumbnail: false }),
   generic: Object.freeze({ type: "generic", label: "Unknown file type", badge: "FILE", iconClass: "text-muted-foreground", badgeClass: "bg-slate-100 text-slate-700", supportsThumbnail: false })
 });
 
@@ -35,7 +40,14 @@ const mimeTypeToDriveFileType: Readonly<Record<string, DriveFileVisualType>> = O
   "application/vnd.ms-excel": "xls",
   "text/csv": "csv",
   "application/csv": "csv",
-  "text/plain": "txt"
+  "text/plain": "txt",
+  "application/vnd.oasis.opendocument.text": "odt",
+  "application/vnd.oasis.opendocument.spreadsheet": "ods",
+  "application/vnd.oasis.opendocument.presentation": "odp",
+  "application/json": "code",
+  "text/html": "code",
+  "text/css": "code",
+  "application/xml": "code"
 });
 
 const extensionToDriveFileType: Readonly<Record<string, DriveFileVisualType>> = Object.freeze({
@@ -48,6 +60,9 @@ const extensionToDriveFileType: Readonly<Record<string, DriveFileVisualType>> = 
   xls: "xls",
   csv: "csv",
   txt: "txt",
+  odt: "odt",
+  ods: "ods",
+  odp: "odp",
   png: "image",
   jpg: "image",
   jpeg: "image",
@@ -74,7 +89,62 @@ const extensionToDriveFileType: Readonly<Record<string, DriveFileVisualType>> = 
   bz2: "archive",
   xz: "archive",
   zst: "archive",
-  zstd: "archive"
+  zstd: "archive",
+  mp4: "video",
+  m4v: "video",
+  mov: "video",
+  "3gp": "video",
+  avi: "video",
+  mkv: "video",
+  webm: "video",
+  flv: "video",
+  mpg: "video",
+  mpeg: "video",
+  mp3: "audio",
+  wav: "audio",
+  ogg: "audio",
+  oga: "audio",
+  flac: "audio",
+  aac: "audio",
+  m4a: "audio",
+  aiff: "audio",
+  aif: "audio",
+  wma: "audio",
+  mid: "audio",
+  midi: "audio",
+  md: "txt",
+  markdown: "txt",
+  json: "code",
+  xml: "code",
+  html: "code",
+  htm: "code",
+  css: "code",
+  yaml: "code",
+  yml: "code",
+  c: "code",
+  h: "code",
+  cc: "code",
+  cpp: "code",
+  hpp: "code",
+  cs: "code",
+  java: "code",
+  js: "code",
+  jsx: "code",
+  mjs: "code",
+  cjs: "code",
+  ts: "code",
+  tsx: "code",
+  py: "code",
+  rb: "code",
+  go: "code",
+  rs: "code",
+  php: "code",
+  sql: "code",
+  sh: "code",
+  bash: "code",
+  ps1: "code",
+  bat: "code",
+  cmd: "code"
 });
 
 const thumbnailMimeTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -95,17 +165,38 @@ export const driveFileVisual = (mimeType?: string, fileName?: string): DriveFile
   const mappedExtension = extension && Object.hasOwn(extensionToDriveFileType, extension)
     ? extensionToDriveFileType[extension]
     : undefined;
-  const mappedType = mappedMimeType
+  const mappedType = mappedMimeType === "txt" && mappedExtension === "code"
+    ? mappedExtension
+    : mappedMimeType
     ?? (normalizedMimeType?.startsWith("image/") ? "image" : undefined)
     ?? (normalizedMimeType?.startsWith("video/") ? "video" : undefined)
+    ?? (normalizedMimeType?.startsWith("audio/") ? "audio" : undefined)
     ?? mappedExtension;
 
-  if (!mappedType) return driveFileVisuals.generic;
-  if (mappedType !== "image" && mappedType !== "archive") return driveFileVisuals[mappedType];
-
+  if (!mappedType) {
+    return Object.freeze({
+      ...driveFileVisuals.generic,
+      badge: extension?.slice(0, 4).toUpperCase() ?? driveFileVisuals.generic.badge
+    });
+  }
   if (mappedType === "archive") {
     return Object.freeze({ ...driveFileVisuals.archive, badge: extension?.toUpperCase() ?? driveFileVisuals.archive.badge });
   }
+
+  if (mappedType === "audio" || mappedType === "code" || mappedType === "video") {
+    const fallback = driveFileVisuals[mappedType];
+    return Object.freeze({ ...fallback, badge: extension?.slice(0, 4).toUpperCase() ?? fallback.badge });
+  }
+
+  if (mappedType === "txt" && extension && extension !== "txt") {
+    return Object.freeze({ ...driveFileVisuals.txt, badge: extension.slice(0, 4).toUpperCase() });
+  }
+
+  if (mappedType === "odt" || mappedType === "ods" || mappedType === "odp") {
+    return Object.freeze({ ...driveFileVisuals[mappedType], badge: extension?.slice(0, 4).toUpperCase() ?? mappedType.toUpperCase() });
+  }
+
+  if (mappedType !== "image") return driveFileVisuals[mappedType];
 
   const supportsThumbnail = (normalizedMimeType !== undefined && thumbnailMimeTypes.has(normalizedMimeType))
     || (extension !== undefined && ["png", "jpg", "jpeg", "gif", "webp"].includes(extension));

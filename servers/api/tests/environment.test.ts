@@ -6,6 +6,7 @@ import { createApiConfig, readApiEnvironment } from "../config/index.js";
 void test("derives API configuration from validated environment input", () => {
   const environment = readApiEnvironment({
     NODE_ENV: "development",
+    AUTH_MODE: "local-demo",
     API_HOST: "127.0.0.1",
     API_PORT: "8080",
     WEB_ORIGIN: "http://localhost:3000",
@@ -13,6 +14,7 @@ void test("derives API configuration from validated environment input", () => {
   });
   assert.deepEqual(createApiConfig(environment), {
     environment: "development",
+    authMode: "local-demo",
     host: "127.0.0.1",
     port: 8080,
     webOrigin: "http://localhost:3000",
@@ -23,6 +25,7 @@ void test("derives API configuration from validated environment input", () => {
 void test("accepts localhost and IPv6 loopback origins", () => {
   const environment = readApiEnvironment({
     NODE_ENV: "test",
+    AUTH_MODE: "local-demo",
     API_HOST: "localhost",
     API_PORT: "8080",
     WEB_ORIGIN: "http://[::1]:3000",
@@ -34,6 +37,7 @@ void test("accepts localhost and IPv6 loopback origins", () => {
 void test("rejects production mode and non-loopback bind hosts or web origins", () => {
   const valid = {
     NODE_ENV: "development",
+    AUTH_MODE: "local-demo",
     API_HOST: "127.0.0.1",
     API_PORT: "8080",
     WEB_ORIGIN: "http://localhost:3000",
@@ -60,6 +64,7 @@ void test("requires runtime values from the environment", () => {
 void test("accepts complete Supabase server configuration and rejects partial or non-project settings", () => {
   const valid = {
     NODE_ENV: "development",
+    AUTH_MODE: "local-demo",
     API_HOST: "127.0.0.1",
     API_PORT: "8080",
     WEB_ORIGIN: "http://localhost:3000",
@@ -75,4 +80,58 @@ void test("accepts complete Supabase server configuration and rejects partial or
   assert.equal(environment.SUPABASE_BUCKET, "squid-drive-files");
   assert.throws(() => readApiEnvironment({ ...valid, SUPABASE_BUCKET: "squid-drive-files" }));
   assert.throws(() => readApiEnvironment({ ...valid, SUPABASE_URL: "http://example.test" }));
+});
+
+void test("does not require email delivery configuration for Drive link sharing", () => {
+  const valid = {
+    NODE_ENV: "development",
+    AUTH_MODE: "local-demo",
+    API_HOST: "127.0.0.1",
+    API_PORT: "8080",
+    WEB_ORIGIN: "http://localhost:3000",
+    LOG_LEVEL: "warn"
+  };
+  const environment = readApiEnvironment(valid);
+  assert.equal(createApiConfig(environment).authMode, "local-demo");
+});
+
+void test("requires complete Google authentication configuration and a safe callback URL", () => {
+  const valid = {
+    NODE_ENV: "test",
+    AUTH_MODE: "google",
+    API_HOST: "127.0.0.1",
+    API_PORT: "8080",
+    WEB_ORIGIN: "http://localhost:3000",
+    LOG_LEVEL: "warn",
+    MONGODB_URI: "mongodb://localhost:27017/squid-drive",
+    GOOGLE_CLIENT_ID: "test-client-id",
+    GOOGLE_CLIENT_SECRET: "test-client-secret",
+    GOOGLE_REDIRECT_URI: "http://localhost:8080/auth/google/callback"
+  };
+
+  const googleEnvironment = readApiEnvironment(valid);
+  assert.equal(googleEnvironment.AUTH_MODE, "google");
+  assert.deepEqual(createApiConfig(googleEnvironment), {
+    environment: "test",
+    authMode: "google",
+    host: "127.0.0.1",
+    port: 8080,
+    webOrigin: "http://localhost:3000",
+    logLevel: "warn",
+    mongodbUri: "mongodb://localhost:27017/squid-drive",
+    googleClientId: "test-client-id",
+    googleClientSecret: "test-client-secret",
+    googleRedirectUri: "http://localhost:8080/auth/google/callback"
+  });
+  assert.throws(() => readApiEnvironment({ ...valid, GOOGLE_CLIENT_SECRET: undefined }));
+  assert.throws(() => readApiEnvironment({ ...valid, MONGODB_URI: undefined }));
+  assert.throws(() => readApiEnvironment({
+    ...valid, GOOGLE_REDIRECT_URI: "http://example.test/auth/google/callback"
+  }));
+  assert.throws(() => readApiEnvironment({
+    ...valid, GOOGLE_REDIRECT_URI: "https://example.test/auth/google/callback?next=evil"
+  }));
+  assert.throws(() => readApiEnvironment({
+    ...valid, AUTH_MODE: "local-demo"
+  }));
 });

@@ -1,4 +1,4 @@
-import type { ApiDriveEntry, ApiDriveFolderPathResponse, ApiDriveListQuery, ApiDriveListResponse, ApiDriveStorageUsage } from "@workspace/types";
+import type { ApiDriveEntry, ApiDriveFolderPathResponse, ApiDriveListQuery, ApiDriveListResponse, ApiDriveShareLinkResponse, ApiDriveShareListResponse, ApiDriveSharedFile, ApiDriveStorageUsage } from "@workspace/types";
 import { drivePreviewKind, maxDrivePreviewBytes, normalizeDriveMimeType } from "./utils/drive-preview.logic";
 import type { DriveUploadProgress } from "./types/drive.types";
 
@@ -62,7 +62,10 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     let response: Response;
     try {
-      response = await fetchImpl(`${baseUrl.replace(/\/$/u, "")}${path}`, init);
+      response = await fetchImpl(`${baseUrl.replace(/\/$/u, "")}${path}`, {
+        ...init,
+        credentials: init?.credentials ?? "include"
+      });
     } catch {
       throw new Error("The local Drive API is unavailable. Start the API and check its local configuration.");
     }
@@ -77,6 +80,7 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
     if (input.search) query.set("search", input.search);
     if (input.favorites) query.set("favorites", "true");
     if (input.recent) query.set("recent", "true");
+    if (input.trash) query.set("trash", "true");
     if (input.fileType) query.set("fileType", input.fileType);
     if (input.modifiedAfter) query.set("modifiedAfter", input.modifiedAfter);
     if (input.modifiedBefore) query.set("modifiedBefore", input.modifiedBefore);
@@ -112,12 +116,45 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
   const recordFileAccess = (id: string): Promise<void> =>
     request(`/drive/entries/${encodeURIComponent(id)}/access`, { method: "POST" });
 
+  const createShareLink = (entryId: string): Promise<ApiDriveShareLinkResponse> =>
+    request(`/drive/entries/${encodeURIComponent(entryId)}/shares`, {
+      method: "POST"
+    });
+
+  const listShares = (entryId: string): Promise<ApiDriveShareListResponse> =>
+    request(`/drive/entries/${encodeURIComponent(entryId)}/shares`);
+
+  const revokeShare = (entryId: string, shareId: string): Promise<void> =>
+    request(`/drive/entries/${encodeURIComponent(entryId)}/shares/${encodeURIComponent(shareId)}`, { method: "DELETE" });
+
+  const getPublicShare = (token: string): Promise<ApiDriveSharedFile> =>
+    request("/drive/share", { headers: { authorization: `Bearer ${token}` }, credentials: "omit" });
+
+  const downloadPublicShare = async (token: string): Promise<Blob> => {
+    let response: Response;
+    try {
+      response = await fetchImpl(`${baseUrl.replace(/\/$/u, "")}/drive/share/download`, {
+        headers: { authorization: `Bearer ${token}` },
+        credentials: "omit"
+      });
+    } catch {
+      throw new Error("The local Drive API is unavailable. Start the API and check its local configuration.");
+    }
+    if (!response.ok) throw new Error(await errorMessage(response));
+    return response.blob();
+  };
+
   const deleteEntry = (id: string): Promise<void> => request(`/drive/entries/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  const restoreEntry = (id: string): Promise<ApiDriveEntry> => request(`/drive/entries/${encodeURIComponent(id)}/restore`, { method: "POST" });
+
+  const permanentlyDeleteEntry = (id: string): Promise<void> => request(`/drive/trash/${encodeURIComponent(id)}`, { method: "DELETE" });
 
   const uploadFile = (file: File, parentId: string, onProgress?: (progress: DriveUploadProgress) => void): Promise<ApiDriveEntry> =>
     new Promise((resolve, reject) => {
       const xhr = xhrFactory();
       xhr.open("PUT", `${baseUrl.replace(/\/$/u, "")}/drive/files`);
+      xhr.withCredentials = true;
       xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
       xhr.setRequestHeader("x-file-name", encodeURIComponent(file.name));
       xhr.setRequestHeader("x-drive-parent-id", parentId);
@@ -147,7 +184,7 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
   const downloadFile = async (id: string): Promise<Blob> => {
     let response: Response;
     try {
-      response = await fetchImpl(downloadUrl(id));
+      response = await fetchImpl(downloadUrl(id), { credentials: "include" });
     } catch {
       throw new Error("The local Drive API is unavailable. Start the API and check its local configuration.");
     }
@@ -158,7 +195,7 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
   const previewFile = async (id: string, signal: AbortSignal, maxBytes = maxDrivePreviewBytes, fileName?: string): Promise<Blob> => {
     let response: Response;
     try {
-      response = await fetchImpl(downloadUrl(id), { signal });
+      response = await fetchImpl(downloadUrl(id), { signal, credentials: "include" });
     } catch (error) {
       if (signal.aborted) throw error;
       throw new Error("The local Drive API is unavailable. Start the API and check its local configuration.");
@@ -166,11 +203,11 @@ export const createDriveApi = ({ baseUrl, fetchImpl = fetch, xhrFactory = () => 
     if (!response.ok) throw new Error(await errorMessage(response));
     const blob = await readBoundedBlob(response, maxBytes);
     const previewKind = drivePreviewKind(blob.type, fileName);
-    if (!normalizeDriveMimeType(blob.type) && previewKind !== "csv" && previewKind !== "pptx") {
+    if (!normalizeDriveMimeType(blob.type) && previewKind !== "csv" && previewKind !== "pptx" && previewKind !== "xlsx") {
       throw new Error("Preview is not available for this file type.");
     }
     return blob;
   };
 
-  return Object.freeze({ list, storageUsage, folderPath, createFolder, updateEntry, setFavorite, recordFileAccess, deleteEntry, uploadFile, downloadUrl, downloadFile, previewFile });
+  return Object.freeze({ list, storageUsage, folderPath, createFolder, updateEntry, setFavorite, recordFileAccess, createShareLink, listShares, revokeShare, getPublicShare, downloadPublicShare, deleteEntry, restoreEntry, permanentlyDeleteEntry, uploadFile, downloadUrl, downloadFile, previewFile });
 };

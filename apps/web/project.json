@@ -4,7 +4,7 @@
   "description": "Primary Next.js web application.",
   "internalDependencies": ["eslint-config", "tsconfig", "types", "ui"],
   "externalDependencies": ["@aiden0z/pptx-renderer", "lucide-react", "mammoth", "next", "pdfjs-dist", "react", "react-dom", "tailwindcss", "zod"],
-  "capabilities": ["web", "app-router", "shadcn-ui", "tailwind"],
+  "capabilities": ["web", "app-router", "shadcn-ui", "tailwind", "google-auth-ui"],
   "tasks": {
     "dev": { "command": "pnpm run dev", "cache": false },
     "build": { "command": "pnpm run build", "outputs": [".next"], "environment": ["NEXT_PUBLIC_API_BASE_URL"], "cache": true },

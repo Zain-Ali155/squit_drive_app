@@ -154,6 +154,15 @@ M03.3 - Auth Vertical Slice Design. Authentication is not implemented in the cur
 - No staging authentication/storage verification or automated browser E2E was run. Local-demo results are not production-readiness evidence.
 - This audit updated only the existing SQUID Drive backlog and this project-state document. Other pre-existing worktree changes were preserved. No credentials, database target, environment configuration, commits, pushes, or deployments were changed.
 
+## SQUID Drive — private email sharing implementation — 2026-10-27
+
+- Implemented `SD-E06-S01` in the existing Drive/auth architecture: owners can invite a recipient email for a file, review active recipients, and revoke access. Google OIDC now requests the email scope and accepts only Google-verified email claims; existing Google user mappings receive the verified email on sign-in without using email to link accounts.
+- The API stores a private owner/file/normalized-recipient grant in MongoDB. Downloads require a Google-authenticated session whose verified email exactly matches the grant and stream bytes through the existing server-side private Supabase adapter. No public URL or signed storage URL is created. Non-matching and revoked grants return the existing non-disclosing not-found error.
+- Email delivery is a server-side plain-text Resend HTTP integration using Node's built-in `fetch`; no dependency was added. Both `RESEND_API_KEY` and `DRIVE_SHARE_FROM_EMAIL` are required together, with a verified sender address. The ignored local `.env` and live provider settings were not inspected or changed; actual configuration presence and delivery remain unknown and unverified. The tracked `.env.example` documents the two non-secret setting names only.
+- API tests: 82/82 passed across Drive, auth, and environment suites using installed `tsx` / Node built-in tests. Web Drive tests: 19/19 passed. API and web TypeScript checks passed. Focused API and web ESLint checks passed. `git diff --check` passed with existing line-ending normalization warnings only. Tests use fake email/storage and in-memory repositories; no live MongoDB, Supabase, Google, or Resend request/write was made.
+- No browser recipient-flow test or live email was performed. Before recipients can use it, configure Resend's API key and verified sender in the local API environment, restart the API by the normal local workflow, and test with two Google accounts in an isolated development setup. The emailed API link currently instructs the recipient to sign in with the invited email before clicking it again; a polished unauthenticated landing/login redirect remains a possible later UI improvement.
+- Only the existing backlog and project-state files were updated as planning/evidence records; all unrelated worktree changes were preserved. No secrets, live data, dependencies, ports, commits, pushes, or deployments were changed.
+
 ## SQUID Drive — automated browser E2E tooling check (2026-10-14)
 
 - Re-read repository testing, development, architecture, UI, and integration instructions. The existing web test script uses the Node.js built-in test runner with `tsx`.

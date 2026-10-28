@@ -1,7 +1,18 @@
 import type { ApiDriveFileType, ApiDriveSortBy, ApiDriveSortOrder } from "@workspace/types";
 
 export type DriveEntryKind = "file" | "folder";
-export type DriveEntryState = "active" | "pending_delete";
+export type DriveEntryState = "active" | "trashed" | "pending_delete";
+
+export type DriveShareRecord = Readonly<{
+  _id: string;
+  ownerId: string;
+  entryId: string;
+  recipientEmail?: string;
+  tokenHash?: string;
+  expiresAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}>;
 
 export type DriveEntryRecord = Readonly<{
   _id: string;
@@ -16,6 +27,7 @@ export type DriveEntryRecord = Readonly<{
   sizeBytes?: number;
   storageKey?: string;
   state: DriveEntryState;
+  trashedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }>;
@@ -26,6 +38,7 @@ export type DrivePage = Readonly<{
   search?: string;
   favorites?: boolean;
   recent?: boolean;
+  trash?: boolean;
   fileType?: ApiDriveFileType;
   modifiedAfter?: string;
   modifiedBefore?: string;

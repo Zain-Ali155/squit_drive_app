@@ -12,5 +12,9 @@ export type {
   ApiDriveListResponse,
   ApiDriveSortBy,
   ApiDriveSortOrder,
-  ApiDriveStorageUsage
+  ApiDriveStorageUsage,
+  ApiDriveShare,
+  ApiDriveShareListResponse,
+  ApiDriveShareLinkResponse,
+  ApiDriveSharedFile
 } from "./api/index.js";

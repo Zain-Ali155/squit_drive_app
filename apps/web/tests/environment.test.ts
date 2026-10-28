@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { ZodError } from "zod";
-import { createApiConfiguration } from "../config/api";
+import { createApiConfiguration, resolveBrowserApiBaseUrl } from "../config/api";
 import { readWebEnvironment } from "../config/env";
 
 test("derives API configuration from validated environment input", () => {
@@ -12,6 +12,21 @@ test("derives API configuration from validated environment input", () => {
 
 test("rejects an invalid API URL", () => {
   assert.throws(() => readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "not-a-url" }));
+});
+
+test("keeps the browser API hostname aligned with either supported local web hostname", () => {
+  assert.equal(
+    resolveBrowserApiBaseUrl("http://localhost:4000", "localhost"),
+    "http://localhost:4000"
+  );
+  assert.equal(
+    resolveBrowserApiBaseUrl("http://localhost:4000", "127.0.0.1"),
+    "http://127.0.0.1:4000"
+  );
+  assert.equal(
+    resolveBrowserApiBaseUrl("https://api.example.test", "127.0.0.1"),
+    "https://api.example.test"
+  );
 });
 
 test("requires the API URL from the environment", () => {

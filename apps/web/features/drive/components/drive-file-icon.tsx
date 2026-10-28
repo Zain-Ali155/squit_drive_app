@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive } from "lucide-react";
 import Image from "next/image";
 import { driveFileVisual } from "../utils/drive-file-visual";
 import type { DriveFileVisual as DriveFileVisualData, DriveFileVisualType } from "../utils/drive-file-visual";
@@ -25,54 +24,51 @@ const imageFileTypes = new Set<DriveFileVisualType>(["image"]);
 export const DriveDocumentFileIcon = ({
   visual,
   className
-}: Readonly<{ visual: DriveFileVisualData; className: string }>) => visual.type === "archive" ? (
-  <Archive
-    aria-hidden="true"
-    className={`${className} ${visual.iconClass}`}
-    data-file-type={visual.type}
-  />
-) : (
-  <svg
-    aria-hidden="true"
-    className={`${className} ${visual.iconClass}`}
-    data-file-type={visual.type}
-    fill="none"
-    viewBox="0 0 24 28"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M4.25 1.25h10l5.5 5.5v19.5H4.25z" fill="white" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.5" />
-    <path d="M14.25 1.5v5.25h5.25" fill="white" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.25" />
-    {visual.type === "pdf" ? (
-      <>
-        <path d="M7 17.5h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-        <path d="M7.5 14.75c1.1-2.4 2-4.7 2.35-6.5.6 3.1 1.8 6 3.45 8.25.8-1 1.8-1.65 3.1-1.85" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2" />
-      </>
-    ) : visual.type === "doc" || visual.type === "docx" ? (
-      <>
-        <path d="M6.5 9.5h6.25v9H6.5z" fill="currentColor" />
-        <path d="m7.5 12 1 4.25L10 13l1.5 3.25 1-4.25" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="0.8" />
-        <path d="M14.5 11h3M14.5 14h3M14.5 17h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.1" />
-      </>
-    ) : visual.type === "ppt" || visual.type === "pptx" ? (
-      <>
-        <rect x="6.25" y="9" width="11.5" height="8" rx="1" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M12 17v2.25m-2.25 0h4.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" />
-        <path d="M9 14.5v-2l1.2 1 1.4-1.5 1.4 1.5 1.8-2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-      </>
-    ) : visual.type === "xls" || visual.type === "xlsx" || visual.type === "csv" ? (
-      <>
-        <rect x="6.25" y="9" width="11.5" height="9" rx="0.75" stroke="currentColor" strokeWidth="1.3" />
-        <path d="M6.5 12h11m-11 3h11m-7.5-5.75v8.5m3.75-8.5v8.5" stroke="currentColor" strokeWidth="1" />
-        {visual.type === "csv" && <path d="M18.5 17.5c.6.1.8.4.65.8-.12.32-.4.53-.72.72" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2" />}
-      </>
-    ) : (
-      <>
-        <path d="M7 10h10M7 13h10M7 16h7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" />
-        <path d="M16.75 15.5v2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3" />
-      </>
-    )}
-  </svg>
-);
+}: Readonly<{ visual: DriveFileVisualData; className: string }>) => {
+  if (visual.type === "archive") {
+    return <span className={`${className} ${visual.iconClass}`} data-file-type={visual.type}>
+      <svg aria-hidden="true" className="size-full" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg">
+        <rect x="5" y="4" width="23" height="8" rx="1.5" fill="#d94b45" stroke="#713b32" />
+        <rect x="5" y="12" width="23" height="8" rx="1.5" fill="#4b9a55" stroke="#32633a" />
+        <rect x="5" y="20" width="23" height="8" rx="1.5" fill="#456caa" stroke="#344e75" />
+        <rect x="13" y="4" width="5" height="24" fill="#f4d879" stroke="#9b8140" />
+        <path d="M14.5 7h2m-2 4h2m-2 4h2m-2 4h2m-2 4h2" stroke="#6b5b37" strokeWidth="1" />
+      </svg>
+    </span>;
+  }
+
+  const mark = visual.type === "pdf" ? "PDF"
+    : visual.type === "doc" || visual.type === "docx" ? "W"
+      : visual.type === "ppt" || visual.type === "pptx" || visual.type === "odp" ? "P"
+        : visual.type === "xls" || visual.type === "xlsx" || visual.type === "csv" || visual.type === "ods" ? "X"
+          : visual.type === "txt" || visual.type === "odt" ? "T"
+            : visual.type === "image" ? "IMG"
+              : visual.type === "audio" ? "♪"
+                : visual.type === "video" ? "▶"
+                  : visual.type === "code" ? "</>"
+                    : visual.badge.slice(0, 3);
+  const markClass = visual.type === "pdf" ? "bg-red-600"
+    : visual.type === "doc" || visual.type === "docx" ? "bg-blue-700"
+      : visual.type === "ppt" || visual.type === "pptx" || visual.type === "odp" ? "bg-orange-600"
+        : visual.type === "xls" || visual.type === "xlsx" || visual.type === "csv" || visual.type === "ods" ? "bg-green-700"
+          : visual.type === "txt" || visual.type === "odt" ? "bg-slate-600"
+            : visual.type === "image" ? "bg-violet-600"
+              : visual.type === "audio" ? "bg-purple-700"
+                : visual.type === "video" ? "bg-rose-600"
+                  : visual.type === "code" ? "bg-cyan-700"
+                    : "bg-slate-500";
+
+  return <span className={className} data-file-type={visual.type}>
+    <svg aria-hidden="true" className="size-full" fill="none" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 2.5h12l8 8v22H6z" fill="white" stroke="#94a3b8" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M18 3v8h8" fill="#e2e8f0" stroke="#94a3b8" strokeLinejoin="round" strokeWidth="1.25" />
+      <path d="M12.5 16h8m-8 4h8m-8 4h5" stroke="#94a3b8" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+    <span className={`absolute bottom-0 left-0 z-10 flex min-h-[42%] min-w-[48%] items-center justify-center border border-white px-0.5 text-[7px] font-bold leading-none tracking-[-0.04em] text-white shadow-sm ${markClass}`} data-file-mark={visual.type}>
+      {mark}
+    </span>
+  </span>;
+};
 
 export const DriveFileTypeIcon = ({ mimeType, fileName, thumbnailUrl, className = "size-6" }: DriveFileTypeIconProps) => {
   const isPngFile = /\.png$/iu.test(fileName);
@@ -92,19 +88,7 @@ export const DriveFileTypeIcon = ({ mimeType, fileName, thumbnailUrl, className 
             src={thumbnailUrl}
             unoptimized
           />
-        ) : (
-          <svg
-            aria-hidden="true"
-            className={`size-full ${visual.iconClass}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <rect x="3" y="4" width="18" height="16" rx="2" fill="white" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="8.5" cy="9" r="1.5" fill="currentColor" />
-            <path d="m5 17 4.5-4.5 3 3L15 13l4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-          </svg>
-        )
+        ) : <DriveDocumentFileIcon className="absolute inset-0 size-full" visual={visual} />
       ) : (
         <DriveDocumentFileIcon className="absolute inset-0 size-full" visual={visual} />
       )}

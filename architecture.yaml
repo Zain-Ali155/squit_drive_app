@@ -229,7 +229,7 @@
     { "project": "web", "root": "types", "categories": ["configuration", "routing"], "rootExports": ["configuration", "routing"] },
     { "project": "api", "root": "integrations", "categories": ["mongodb"], "rootExports": ["mongodb"] },
     { "project": "api", "root": "constants", "categories": ["errors", "http", "runtime"], "rootExports": ["errors", "http", "runtime"] },
-    { "project": "api", "root": "types", "categories": ["configuration"], "rootExports": ["configuration"] },
+    { "project": "api", "root": "types", "categories": ["configuration", "identity"], "rootExports": ["configuration", "identity"] },
     { "project": "api", "root": "features/health", "categories": ["controllers", "routes", "services"], "rootExports": ["routes"] },
     { "project": "types", "root": "src", "categories": ["api"], "rootExports": ["api"] },
     { "project": "types", "root": "src/api", "categories": ["environment", "errors", "health"], "rootExports": ["environment", "errors", "health"] },

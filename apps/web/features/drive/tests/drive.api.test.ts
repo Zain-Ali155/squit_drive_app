@@ -5,16 +5,19 @@ import { maxDrivePptxPreviewBytes } from "../utils/drive-preview.logic.js";
 
 void test("Drive client retrieves owner-scoped storage usage and reports API failures", async (): Promise<void> => {
   let requestedUrl = "";
+  let requestedCredentials: RequestCredentials | undefined;
   const api = createDriveApi({
     baseUrl: "http://127.0.0.1:4000",
-    fetchImpl: (input) => {
+    fetchImpl: (input, init) => {
       requestedUrl = String(input);
-      return Promise.resolve(Response.json({ usedBytes: 1_250_000 }));
+      requestedCredentials = init?.credentials;
+      return Promise.resolve(Response.json({ usedBytes: 1_250_000, totalBytes: 1_000_000_000 }));
     }
   });
 
-  assert.deepEqual(await api.storageUsage(), { usedBytes: 1_250_000 });
+  assert.deepEqual(await api.storageUsage(), { usedBytes: 1_250_000, totalBytes: 1_000_000_000 });
   assert.equal(requestedUrl, "http://127.0.0.1:4000/drive/storage-usage");
+  assert.equal(requestedCredentials, "include");
 
   const failed = createDriveApi({
     baseUrl: "http://127.0.0.1:4000",
@@ -23,7 +26,49 @@ void test("Drive client retrieves owner-scoped storage usage and reports API fai
   await assert.rejects(failed.storageUsage(), /Usage unavailable/u);
 });
 
-void test("Drive client builds list queries and uses the shared response contract", async (): Promise<void> => {
+void test("Drive client creates, lists, and revokes owner-scoped download links", async (): Promise<void> => {
+  const requested: Array<Readonly<{ url: string; method: string | undefined; credentials: RequestCredentials | undefined; body: string | undefined }>> = [];
+  const api = createDriveApi({
+    baseUrl: "http://localhost:4000",
+    fetchImpl: (input, init) => {
+      requested.push({ url: String(input), method: init?.method, credentials: init?.credentials, body: init?.body?.toString() });
+      if (init?.method === "POST") return Promise.resolve(Response.json({ id: "share-id", token: "A".repeat(43), expiresAt: "2026-11-03T12:00:00.000Z", createdAt: "2026-10-27T12:00:00.000Z" }));
+      if (init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(Response.json({ shares: [{ id: "share-id", accessType: "link", expiresAt: "2026-11-03T12:00:00.000Z", createdAt: "2026-10-27T12:00:00.000Z" }] }));
+    }
+  });
+  const created = await api.createShareLink("file/id");
+  assert.equal(created.id, "share-id");
+  assert.equal(created.token.length, 43);
+  assert.equal((await api.listShares("file/id")).shares[0]?.accessType, "link");
+  await api.revokeShare("file/id", "share/id");
+  assert.deepEqual(requested.map(({ url, method, credentials, body }) => ({ url, method, credentials, body })), [
+    { url: "http://localhost:4000/drive/entries/file%2Fid/shares", method: "POST", credentials: "include", body: undefined },
+    { url: "http://localhost:4000/drive/entries/file%2Fid/shares", method: undefined, credentials: "include", body: undefined },
+    { url: "http://localhost:4000/drive/entries/file%2Fid/shares/share%2Fid", method: "DELETE", credentials: "include", body: undefined }
+  ]);
+});
+
+void test("public link uses only an Authorization header and omits session credentials", async (): Promise<void> => {
+  const requests: Array<Readonly<{ url: string; authorization: string | null; credentials: RequestCredentials | undefined }>> = [];
+  const token = "A".repeat(43);
+  const api = createDriveApi({
+    baseUrl: "http://localhost:4000",
+    fetchImpl: (input, init) => {
+      requests.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), credentials: init?.credentials });
+      if (String(input).endsWith("/download")) return Promise.resolve(new Response(new Blob(["safe bytes"])));
+      return Promise.resolve(Response.json({ name: "shared.pdf", mimeType: "application/pdf", sizeBytes: 10 }));
+    }
+  });
+  assert.equal((await api.getPublicShare(token)).name, "shared.pdf");
+  assert.equal(await (await api.downloadPublicShare(token)).text(), "safe bytes");
+  assert.deepEqual(requests, [
+    { url: "http://localhost:4000/drive/share", authorization: `Bearer ${token}`, credentials: "omit" },
+    { url: "http://localhost:4000/drive/share/download", authorization: `Bearer ${token}`, credentials: "omit" }
+  ]);
+});
+
+void test("Drive client builds list queries, including the owner-scoped Trash view", async (): Promise<void> => {
   let requestedUrl = "";
   const api = createDriveApi({
     baseUrl: "http://127.0.0.1:4000/",
@@ -52,6 +97,32 @@ void test("Drive client builds list queries and uses the shared response contrac
   assert.equal(new URL(requestedUrl).searchParams.get("favorites"), "true");
   assert.equal(new URL(requestedUrl).searchParams.has("recent"), false);
   assert.deepEqual(result, { entries: [], total: 0, parentId: "root-id" });
+});
+
+void test("Drive client lists Trash and sends owner-authorized restore and permanent-delete requests", async (): Promise<void> => {
+  const requests: Array<Readonly<{ url: string; method: string | undefined; credentials: RequestCredentials | undefined }>> = [];
+  const api = createDriveApi({
+    baseUrl: "http://127.0.0.1:4000",
+    fetchImpl: (input, init) => {
+      requests.push({ url: String(input), method: init?.method, credentials: init?.credentials });
+      if (String(input).includes("/restore")) return Promise.resolve(Response.json({
+        id: "entry-id", kind: "file", name: "restored.txt", parentId: "folder-id", isStarred: false,
+        createdAt: "2026-10-28T00:00:00.000Z", updatedAt: "2026-10-28T00:00:00.000Z"
+      }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+  });
+
+  await api.list({ trash: true });
+  const restored = await api.restoreEntry("entry/id");
+  await api.permanentlyDeleteEntry("entry/id");
+
+  assert.equal(new URL(requests[0]?.url ?? "").searchParams.get("trash"), "true");
+  assert.equal(restored.name, "restored.txt");
+  assert.deepEqual(requests.slice(1), [
+    { url: "http://127.0.0.1:4000/drive/entries/entry%2Fid/restore", method: "POST", credentials: "include" },
+    { url: "http://127.0.0.1:4000/drive/trash/entry%2Fid", method: "DELETE", credentials: "include" }
+  ]);
 });
 
 void test("Drive client records successful preview access with an owner-authorized API request", async (): Promise<void> => {
@@ -128,6 +199,7 @@ void test("Drive client sends browser uploads to the API with encoded names and 
   let capturedBody: File | undefined;
   const fakeXhr = {
     upload: { onprogress: null as ((event: ProgressEvent) => void) | null },
+    withCredentials: false,
     status: 201,
     responseText: JSON.stringify({
       id: "file-id", kind: "file", name: "résumé.pdf", parentId: "folder-id", sizeBytes: 5,
@@ -159,6 +231,7 @@ void test("Drive client reports upload progress and completes the shared respons
   const file = new File(["%PDF-"], "report.pdf", { type: "application/pdf" });
   const fakeXhr = {
     upload: { onprogress: null as ((event: ProgressEvent) => void) | null },
+    withCredentials: false,
     status: 201,
     responseText: JSON.stringify({
       id: "file-id", kind: "file", name: file.name, parentId: "folder-id", sizeBytes: file.size,
@@ -178,6 +251,7 @@ void test("Drive client reports upload progress and completes the shared respons
   const result = await api.uploadFile(file, "folder-id", ({ loaded }) => progress.push(loaded));
 
   assert.equal(result.id, "file-id");
+  assert.equal(fakeXhr.withCredentials, true);
   assert.deepEqual(progress, [3, file.size]);
 });
 

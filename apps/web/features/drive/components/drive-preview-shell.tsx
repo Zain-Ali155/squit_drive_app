@@ -56,10 +56,10 @@ export const DrivePreviewSurface = ({
 }: DrivePreviewSurfaceProps) => {
   return (
     <section aria-label={`File preview: ${fileName}`} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f1f3f4]">
-      <header className="z-20 flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 bg-[#202124] px-2 py-2 text-white sm:px-4">
+      <header className="z-20 flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-background px-3 py-2 text-foreground shadow-sm sm:px-5">
         <Button
           aria-label="Close preview"
-          className="size-10 shrink-0 rounded-full text-white hover:bg-white/10 hover:text-white"
+          className="size-9 shrink-0 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           size="icon"
           type="button"
           variant="ghost"
@@ -67,21 +67,24 @@ export const DrivePreviewSurface = ({
         >
           <X aria-hidden="true" className="size-5" />
         </Button>
-        <DriveFileTypeIcon className="size-8" fileName={fileName} mimeType={mimeType} thumbnailUrl={thumbnailUrl} />
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/70">
+          <DriveFileTypeIcon className="size-8" fileName={fileName} mimeType={mimeType} thumbnailUrl={thumbnailUrl} />
+        </span>
         <div className="min-w-0 flex-1 px-1">
-          <h1 className="truncate text-sm font-medium sm:text-base" title={fileName}>{fileName}</h1>
-          <p className="truncate text-xs text-white/65">{sizeLabel}</p>
+          <h1 className="truncate text-sm font-semibold sm:text-base" title={fileName}>{fileName}</h1>
+          <p className="truncate text-xs text-muted-foreground">{sizeLabel}</p>
         </div>
         <Button
           aria-label={downloading ? "Downloading file" : "Download file"}
-          className="shrink-0 text-white hover:bg-white/10 hover:text-white"
+          className="h-9 shrink-0 gap-2"
           disabled={downloading}
-          size="icon"
+          size="sm"
           type="button"
-          variant="ghost"
+          variant="outline"
           onClick={onDownload}
         >
-          <Download aria-hidden="true" className="size-5" />
+          <Download aria-hidden="true" className="size-4" />
+          <span>Download</span>
         </Button>
       </header>
       <div className="min-h-0 min-w-0 flex-1 overflow-auto">

@@ -16,8 +16,8 @@ import { isApplicationError } from "../../../errors/index.js";
 import { createDriveService } from "../drive.service.js";
 import type { DriveRepository } from "../repositories/index.js";
 import type { SupabaseStorageIntegration } from "../integrations/drive.integration.js";
-import { driveEntrySchema, type DriveRepositoryModel } from "../integrations/drive.mongodb.integration.js";
-import { MAX_DRIVE_FILE_SIZE } from "../drive.validation.js";
+import { driveEntrySchema, driveShareSchema, type DriveRepositoryModel } from "../integrations/drive.mongodb.integration.js";
+import { MAX_DRIVE_FILE_SIZE, MAX_DRIVE_STORAGE_QUOTA_BYTES } from "../drive.validation.js";
 import {
   createFolderSchema,
   driveEntryIdSchema,
@@ -74,11 +74,14 @@ void test("listing validates file type, modified-date, size, sort, and page filt
   assert.equal(driveListQuerySchema.safeParse({ favorites: "yes" }).success, false);
   assert.equal(driveListQuerySchema.parse({ recent: "true" }).recent, true);
   assert.equal(driveListQuerySchema.safeParse({ recent: "yes" }).success, false);
+  assert.equal(driveListQuerySchema.parse({ trash: "true" }).trash, true);
   const folderId = "00000000-0000-4000-8000-000000000001";
   assert.equal(driveListQuerySchema.safeParse({ parentId: folderId, search: "report" }).success, false);
   assert.equal(driveListQuerySchema.safeParse({ parentId: folderId, favorites: "true" }).success, false);
   assert.equal(driveListQuerySchema.safeParse({ parentId: folderId, recent: "true" }).success, false);
   assert.equal(driveListQuerySchema.safeParse({ favorites: "true", recent: "true" }).success, false);
+  assert.equal(driveListQuerySchema.safeParse({ trash: "true", search: "report" }).success, false);
+  assert.equal(driveListQuerySchema.safeParse({ trash: "true", favorites: "true" }).success, false);
   assert.deepEqual(driveListQuerySchema.parse({ search: "report", favorites: "true", fileType: "pdf" }), {
     search: "report", favorites: true, page: 1, pageSize: 25, fileType: "pdf"
   });
@@ -108,14 +111,19 @@ void test("Mongo schema defines ownership, sibling uniqueness, search, listing a
     keys.ownerId === 1 && keys.state === 1 && keys.kind === 1 && keys.lastAccessedAt === -1
   ), true);
   assert.equal(indexes.some(([keys, options]) => keys.storageKey === 1 && options.unique === true), true);
+  const shareIndexes = driveShareSchema.indexes();
+  assert.equal(shareIndexes.some(([keys, options]) =>
+    keys.ownerId === 1 && keys.entryId === 1 && keys.recipientEmail === 1 && options.unique === true
+  ), true);
+  assert.equal(shareIndexes.some(([keys]) => keys.recipientEmail === 1 && keys._id === 1), true);
 });
 
-void test("repository filters always carry server-supplied owner and active state", (): void => {
+void test("repository filters keep ownership and child checks include trashed children", (): void => {
   assert.deepEqual(createOwnedEntryFilter("local-demo-owner", "entry-id"), {
     ownerId: "local-demo-owner", _id: "entry-id", state: "active"
   });
   assert.deepEqual(createOwnedChildrenFilter("local-demo-owner", null, "folder"), {
-    ownerId: "local-demo-owner", parentId: null, state: "active", kind: "folder"
+    ownerId: "local-demo-owner", parentId: null, state: { $in: ["active", "trashed", "pending_delete"] }, kind: "folder"
   });
 });
 
@@ -163,6 +171,7 @@ void test("Mongo repository keeps reads owner-scoped and searches across all own
   await repository.listOwnedEntries("local-demo-owner", "folder-id", { page: 3, pageSize: 10 });
   await repository.listOwnedEntries("local-demo-owner", "folder-id", { page: 2, pageSize: 5, search: "report" });
   await repository.listOwnedEntries("local-demo-owner", "folder-id", { page: 1, pageSize: 25, favorites: true });
+  await repository.listOwnedEntries("local-demo-owner", "ignored-folder", { page: 1, pageSize: 25, trash: true });
 
   assert.deepEqual(filters[0], { ownerId: "local-demo-owner", _id: "entry-id", state: "active" });
   assert.deepEqual(filters[1], { ownerId: "local-demo-owner", parentId: "folder-id", state: "active" });
@@ -173,16 +182,20 @@ void test("Mongo repository keeps reads owner-scoped and searches across all own
   assert.deepEqual(filters[5], {
     ownerId: "local-demo-owner", state: "active", isStarred: true
   });
+  assert.deepEqual(filters[7], {
+    ownerId: "local-demo-owner", state: { $in: ["trashed", "pending_delete"] }
+  });
   assert.deepEqual(sorts, [
+    { kind: 1, normalizedName: 1, _id: 1 },
     { kind: 1, normalizedName: 1, _id: 1 },
     { kind: 1, normalizedName: 1, _id: 1 },
     { kind: 1, normalizedName: 1, _id: 1 }
   ]);
-  assert.deepEqual(offsets, [20, 5, 0]);
-  assert.deepEqual(limits, [10, 5, 25]);
+  assert.deepEqual(offsets, [20, 5, 0, 0]);
+  assert.deepEqual(limits, [10, 5, 25, 25]);
 });
 
-void test("Mongo storage usage aggregates active files with the owner filter and returns zero for no matches", async (): Promise<void> => {
+void test("Mongo storage usage aggregates stored files with the owner filter and returns zero for no matches", async (): Promise<void> => {
   const pipelines: Record<string, unknown>[][] = [];
   let usageRows: readonly Readonly<{ usedBytes: number }>[] = [];
   const model = {
@@ -196,13 +209,43 @@ void test("Mongo storage usage aggregates active files with the owner filter and
   usageRows = [{ usedBytes: 1_500_000 }];
   assert.equal(await repository.getOwnedStorageUsage("owner-a"), 1_500_000);
   assert.deepEqual(pipelines[0], [
-    { $match: { ownerId: "owner-a", state: "active", kind: "file" } },
+    { $match: { ownerId: "owner-a", state: { $in: ["active", "trashed", "pending_delete"] }, kind: "file" } },
     { $group: { _id: null, usedBytes: { $sum: "$sizeBytes" } } },
     { $project: { _id: 0, usedBytes: 1 } }
   ]);
 
   usageRows = [];
   assert.equal(await repository.getOwnedStorageUsage("owner-b"), 0);
+});
+
+void test("Mongo quota reservations atomically include active leases and are owner-scoped", async (): Promise<void> => {
+  const updates: Array<Readonly<{ filter: Record<string, unknown>; update: unknown; options: unknown }>> = [];
+  const quotaModel = {
+    updateOne: (filter: Record<string, unknown>, update: unknown, options: unknown) => {
+      updates.push({ filter, update, options });
+      return { exec: () => Promise.resolve({ matchedCount: 1 }) };
+    }
+  };
+  const entryModel = { aggregate: () => ({ exec: () => Promise.resolve([]) }) } as unknown as DriveRepositoryModel;
+  const repository = createDriveRepository({ model: entryModel, quotaModel: quotaModel as never });
+  const expiresAt = new Date("2026-10-27T20:00:00.000Z");
+
+  assert.equal(await repository.reserveOwnedStorageQuota("owner-a", "reservation-a", 20, 100, expiresAt), true);
+  await repository.releaseOwnedStorageQuota("owner-a", "reservation-a");
+
+  assert.equal(updates.length, 3);
+  const [initialize, reserve, release] = updates;
+  assert.ok(initialize && reserve && release);
+  assert.deepEqual(initialize.filter, { ownerId: "owner-a" });
+  assert.deepEqual(initialize.options, { upsert: true });
+  assert.equal(reserve.filter.ownerId, "owner-a");
+  assert.deepEqual(reserve.options, { updatePipeline: true });
+  assert.equal(JSON.stringify(reserve.filter).includes("999999900"), true);
+  assert.equal(JSON.stringify(reserve.update).includes("reservation-a"), true);
+  assert.equal(JSON.stringify(reserve.update).includes("expiresAt"), true);
+  assert.equal(release.filter.ownerId, "owner-a");
+  assert.deepEqual(release.options, { updatePipeline: true });
+  assert.equal(JSON.stringify(release.update).includes("reservation-a"), true);
 });
 
 void test("Mongo Recent listing requires active owned files with access timestamps and sorts stably before pagination", async (): Promise<void> => {
@@ -351,7 +394,7 @@ void test("Mongo favorite updates require the current owner and active entry sta
   assert.deepEqual(updates[0], { $set: { isStarred: true } });
 });
 
-void test("deletion recovery lookup is owner-scoped and includes only active or pending-delete records", async (): Promise<void> => {
+void test("trash and deletion recovery lookups remain owner-scoped", async (): Promise<void> => {
   const filters: Record<string, unknown>[] = [];
   const model = {
     findOne: (filter: Record<string, unknown>) => {
@@ -364,7 +407,7 @@ void test("deletion recovery lookup is owner-scoped and includes only active or 
   await repository.findOwnedEntryForDeletion("owner-a", "entry-id");
 
   assert.deepEqual(filters[0], {
-    ownerId: "owner-a", _id: "entry-id", state: { $in: ["active", "pending_delete"] }
+    ownerId: "owner-a", _id: "entry-id", state: { $in: ["active", "trashed", "pending_delete"] }
   });
 });
 
@@ -407,7 +450,7 @@ void test("Mongo repository scopes metadata writes and permanent-delete operatio
   assert.deepEqual(filters[0], { ownerId: "local-demo-owner", _id: "file-id", state: "active" });
   assert.deepEqual(updates[0], { $set: { state: "pending_delete" } });
   assert.equal(filters[1]?.ownerId, "local-demo-owner");
-  assert.deepEqual(filters[2], { ownerId: "local-demo-owner", _id: "file-id", state: { $in: ["active", "pending_delete"] } });
+  assert.deepEqual(filters[2], { ownerId: "local-demo-owner", _id: "file-id", state: { $in: ["active", "trashed", "pending_delete"] } });
   assert.equal(filters[3]?.ownerId, "local-demo-owner");
   assert.equal(updates[1]?.$setOnInsert !== undefined, true);
 });
@@ -432,12 +475,14 @@ type UploadRecoveryHarnessOptions = Readonly<{
   metadataLookup: (ownerId: string, entryId: string, storageKey: string) => Promise<boolean>;
   metadataError?: Error;
   failStorageCleanup?: boolean;
+  storageUsageBytes?: number;
 }>;
 
 const createUploadRecoveryHarness = ({
   metadataLookup,
   metadataError = new Error("metadata create failed"),
-  failStorageCleanup = false
+  failStorageCleanup = false,
+  storageUsageBytes = 0
 }: UploadRecoveryHarnessOptions) => {
   const now = new Date();
   const root: DriveEntryRecord = {
@@ -449,21 +494,38 @@ const createUploadRecoveryHarness = ({
   const removedKeys: string[] = [];
   const errorLogs: Readonly<{ message: string; context?: LogContext }>[] = [];
   const warnLogs: Readonly<{ message: string; context?: LogContext }>[] = [];
+  const releasedReservations: string[] = [];
   const repository: DriveRepository = {
     findOwnedEntry: () => Promise.resolve(root),
     recordOwnedFileAccess: () => Promise.resolve(null),
     findOwnedEntryForDeletion: () => Promise.resolve(null),
     listOwnedEntries: () => Promise.resolve({ entries: [], total: 0 }),
-    getOwnedStorageUsage: () => Promise.resolve(0),
+    getOwnedStorageUsage: () => Promise.resolve(storageUsageBytes),
+    reserveOwnedStorageQuota: (_ownerId, _reservationId, sizeBytes, usedBytes) =>
+      Promise.resolve(usedBytes + sizeBytes <= MAX_DRIVE_STORAGE_QUOTA_BYTES),
+    releaseOwnedStorageQuota: (_ownerId, reservationId) => {
+      releasedReservations.push(reservationId);
+      return Promise.resolve();
+    },
     createEntry: (entry) => {
       createdEntries.push(entry);
       return Promise.reject(metadataError);
     },
     hasOwnedUploadEntry: metadataLookup,
     updateOwnedEntry: () => Promise.resolve(null),
+    moveOwnedEntryToTrash: () => Promise.resolve(null),
+    restoreOwnedEntry: () => Promise.resolve(null),
+    markOwnedEntryPendingDelete: () => Promise.resolve(null),
     hasOwnedChildren: () => Promise.resolve(false),
     deleteOwnedEntry: () => Promise.resolve(false),
-    ensureRoot: () => Promise.resolve(root)
+    ensureRoot: () => Promise.resolve(root),
+    createShare: () => Promise.reject(new Error("Unexpected share creation.")),
+    createOrRotateLinkShare: () => Promise.reject(new Error("Unexpected share creation.")),
+    findSharesForOwnedEntry: () => Promise.resolve([]),
+    findShareForRecipient: () => Promise.resolve(null),
+    findShareByTokenHash: () => Promise.resolve(null),
+    deleteOwnedShare: () => Promise.resolve(false),
+    deleteOwnedEntryShares: () => Promise.resolve()
   };
   const storage: SupabaseStorageIntegration = {
     verifyPrivateBucket: () => Promise.resolve(true),
@@ -485,14 +547,43 @@ const createUploadRecoveryHarness = ({
   };
 
   return {
-    service: createDriveService({ repository, storage, logger }),
+    service: createDriveService({ repository, storage, logger, ownerId: "local-demo-owner" }),
     createdEntries,
     objects,
     removedKeys,
+    releasedReservations,
     errorLogs,
     warnLogs
   };
 };
+
+void test("Drive upload rejects files that exceed the owner's 1 GB quota before writing to Storage", async (): Promise<void> => {
+  const input = uploadRecoveryInput();
+  const harness = createUploadRecoveryHarness({
+    metadataLookup: () => Promise.resolve(false),
+    storageUsageBytes: MAX_DRIVE_STORAGE_QUOTA_BYTES - input.contentLength + 1
+  });
+
+  await assert.rejects(
+    harness.service.uploadFile(input),
+    (error: unknown) => isApplicationError(error) && error.code === ERROR_CODES.driveStorageQuotaExceeded
+  );
+  assert.equal(harness.objects.size, 0);
+  assert.deepEqual(harness.releasedReservations, []);
+});
+
+void test("Drive upload allows a file that fills the owner's quota exactly", async (): Promise<void> => {
+  const input = uploadRecoveryInput();
+  const harness = createUploadRecoveryHarness({
+    metadataLookup: () => Promise.resolve(false),
+    storageUsageBytes: MAX_DRIVE_STORAGE_QUOTA_BYTES - input.contentLength
+  });
+
+  await assert.rejects(harness.service.uploadFile(input), /metadata create failed/u);
+  assert.equal(harness.objects.size, 0);
+  assert.equal(harness.removedKeys.length, 1);
+  assert.equal(harness.releasedReservations.length, 1);
+});
 
 const uploadRecoveryInput = () => {
   const bytes = Buffer.from("%PDF-1.7 recovery test");
@@ -515,6 +606,7 @@ void test("metadata creation failure with confirmed absence cleans up the upload
   assert.deepEqual(harness.removedKeys, [entry.storageKey]);
   assert.equal(harness.objects.has(entry.storageKey), false);
   assert.equal(harness.errorLogs.length, 0);
+  assert.equal(harness.releasedReservations.length, 1);
 });
 
 void test("metadata creation failure preserves the object when the exact metadata record exists", async (): Promise<void> => {
@@ -628,6 +720,7 @@ void test("validated upload stream accepts a matching PDF without buffering the 
   assert.equal(await upload.completion, content.length);
   assert.deepEqual(received, content);
   assert.equal(MAX_DRIVE_FILE_SIZE, 50_000_000);
+  assert.equal(MAX_DRIVE_STORAGE_QUOTA_BYTES, 1_000_000_000);
 });
 
 void test("validated upload stream accepts existing preview document, text, and image formats", async (): Promise<void> => {

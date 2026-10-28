@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { DriveImagePreview } from "../components/drive-image-preview.js";
 import { DrivePreviewSurface, DriveUnsupportedPreview } from "../components/drive-preview-shell.js";
 
-void test("shared preview shell renders a compact accessible dark toolbar with close and download", (): void => {
+void test("shared preview shell renders a polished accessible toolbar with close and download", (): void => {
   const markup = renderToStaticMarkup(createElement(
     DrivePreviewSurface,
     {
@@ -20,9 +20,10 @@ void test("shared preview shell renders a compact accessible dark toolbar with c
   ));
 
   assert.match(markup, /aria-label="File preview: quarterly-report\.pdf"/u);
-  assert.match(markup, /bg-\[#202124\]/u);
+  assert.match(markup, /border-b border-border bg-background/u);
   assert.match(markup, /aria-label="Close preview"/u);
   assert.match(markup, /aria-label="Download file"/u);
+  assert.match(markup, /<span>Download<\/span>/u);
   assert.match(markup, /size-8/u);
   assert.match(markup, /data-file-type="pdf"/u);
   assert.doesNotMatch(markup, /File menu|View menu|Hide file details|Show file details/u);
@@ -58,8 +59,9 @@ void test("preview toolbar reuses the listing PNG override, thumbnail and fallba
   ));
 
   const fallbackMarkup = renderPreview("application/pdf");
-  assert.match(fallbackMarkup, /<rect/u);
-  assert.match(fallbackMarkup, /text-violet-600/u);
+  assert.match(fallbackMarkup, /data-file-type="image"/u);
+  assert.match(fallbackMarkup, /data-file-mark="image"/u);
+  assert.match(fallbackMarkup, /bg-violet-600/u);
   assert.match(fallbackMarkup, /aria-hidden="true"/u);
   assert.match(fallbackMarkup, /size-8/u);
   assert.doesNotMatch(fallbackMarkup, /<text|>PNG</u);

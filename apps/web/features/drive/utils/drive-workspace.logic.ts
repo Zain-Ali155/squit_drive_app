@@ -8,6 +8,9 @@ export const formatDriveStorageUsage = (sizeBytes: number): string => {
   return `${(sizeBytes / 1_000_000_000).toFixed(2)} GB`;
 };
 
+export const driveStorageUsagePercent = (usedBytes: number, totalBytes: number): number =>
+  totalBytes <= 0 ? 0 : Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100));
+
 export type DriveSortSelection =
   | "default"
   | "name-asc"
@@ -95,7 +98,10 @@ export type DriveMutationKind =
   | "move"
   | "favorite"
   | "file-delete"
-  | "folder-delete";
+  | "folder-delete"
+  | "trash"
+  | "restore"
+  | "permanent-delete";
 
 export const runDriveAction = async (
   action: () => Promise<unknown>,
@@ -105,7 +111,7 @@ export const runDriveAction = async (
 ): Promise<void> => {
   await action();
   await reload();
-  if (mutation === "upload" || mutation === "file-delete") await refreshStorageUsage();
+  if (mutation === "upload" || mutation === "file-delete" || mutation === "permanent-delete") await refreshStorageUsage();
 };
 
 type DriveRowClickTarget = Readonly<{ closest: (selector: string) => unknown }>;

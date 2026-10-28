@@ -21,15 +21,22 @@ const isEquivalentLoopbackOrigin = (requestOrigin: string, configuredOrigin: str
   }
 };
 
+export const isTrustedOrigin = (
+  requestOrigin: string | undefined,
+  configuredOrigin: string,
+  environment: ApiEnvironment
+): boolean => requestOrigin === configuredOrigin ||
+  (environment === "development" && requestOrigin !== undefined && isEquivalentLoopbackOrigin(requestOrigin, configuredOrigin)) ||
+  (environment === "development" && requestOrigin === localDevelopmentOrigin);
+
 export const createCorsMiddleware = ({ origin, environment }: { origin: string; environment: ApiEnvironment }): RequestHandler =>
   (request, response, next) => {
     const requestOrigin = request.get("Origin");
-    const isAllowedOrigin = requestOrigin === origin ||
-      (environment === "development" && requestOrigin !== undefined && isEquivalentLoopbackOrigin(requestOrigin, origin)) ||
-      (environment === "development" && requestOrigin === localDevelopmentOrigin);
+    const isAllowedOrigin = isTrustedOrigin(requestOrigin, origin, environment);
 
     if (isAllowedOrigin && requestOrigin) {
       response.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      response.setHeader("Access-Control-Allow-Credentials", "true");
       response.setHeader("Vary", "Origin");
       response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-File-Name, X-Drive-Parent-Id");
       response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");

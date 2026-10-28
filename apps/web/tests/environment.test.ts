@@ -63,6 +63,13 @@ test("web server scripts use the local-only dual-loopback server", async () => {
   assert.equal(packageManifest.scripts.start, "tsx server.ts");
 });
 
+test("web build compiles the workspace UI package before Next.js", async () => {
+  const packageText = await readFile(new URL("../package.json", import.meta.url), "utf8");
+  const packageManifest = JSON.parse(packageText) as { scripts: Record<string, string> };
+
+  assert.equal(packageManifest.scripts.build, "pnpm --dir ../../packages/ui run build && next build");
+});
+
 test("local web environment example targets the API on port 4000", async () => {
   const exampleText = await readFile(new URL("../.env.example", import.meta.url), "utf8");
 

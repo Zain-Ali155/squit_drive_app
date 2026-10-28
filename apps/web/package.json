@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "tsx server.ts --dev",
-    "build": "next build",
+    "build": "pnpm --dir ../../packages/ui run build && next build",
     "start": "tsx server.ts",
     "test": "tsx --test tests/integration/home-page.test.tsx tests/environment.test.ts tests/loopback-server.test.ts features/auth/tests/*.test.ts features/drive/tests/*.test.ts features/drive/tests/drive-workspace.test.tsx",
     "lint": "eslint .",

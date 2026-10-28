@@ -29,6 +29,13 @@ export type AuthControllerDependencies = Readonly<{
   now?: () => Date;
 }>;
 
+export type AuthController = Readonly<{
+  googleLogin: RequestHandler;
+  currentUser: RequestHandler;
+  googleCallback: RequestHandler;
+  logout: RequestHandler;
+}>;
+
 const readCookie = (request: Request, name: string): string | null => {
   const cookieHeader = request.headers.cookie;
   if (!cookieHeader) return null;
@@ -74,7 +81,7 @@ const queryString = (request: Request, name: string): string | null | undefined 
   return value === undefined ? null : undefined;
 };
 
-export const createAuthController = (dependencies: AuthControllerDependencies) => {
+export const createAuthController = (dependencies: AuthControllerDependencies): AuthController => {
   const { cookieSecure, now = () => new Date(), repository, origin, redirectUri, environment } = dependencies;
   const service = createOAuthFlowService({ ...dependencies, redirectUri });
   const legacyBindingCookieName = getOAuthBindingCookieName(cookieSecure);

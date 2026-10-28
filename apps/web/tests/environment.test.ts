@@ -16,6 +16,18 @@ test("accepts same-origin API routing for multi-service deployments", () => {
   assert.equal(resolveBrowserApiBaseUrl(environment.NEXT_PUBLIC_API_BASE_URL, "squid-drive-demo.vercel.app"), "/");
 });
 
+test("defaults a missing API base URL to same-origin routing on Vercel", () => {
+  assert.deepEqual(readWebEnvironment({ VERCEL: "1" }), {
+    NEXT_PUBLIC_API_BASE_URL: "/"
+  });
+});
+
+test("defaults a blank API base URL to same-origin routing on Vercel", () => {
+  assert.deepEqual(readWebEnvironment({ VERCEL: "1", NEXT_PUBLIC_API_BASE_URL: "" }), {
+    NEXT_PUBLIC_API_BASE_URL: "/"
+  });
+});
+
 test("rejects an invalid API URL", () => {
   assert.throws(() => readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "not-a-url" }));
 });
@@ -37,6 +49,10 @@ test("keeps the browser API hostname aligned with either supported local web hos
 
 test("requires the API URL from the environment", () => {
   assert.throws(() => readWebEnvironment({}), ZodError);
+});
+
+test("still requires the API URL outside Vercel", () => {
+  assert.throws(() => readWebEnvironment({ NODE_ENV: "production" }), ZodError);
 });
 
 test("web server scripts use the local-only dual-loopback server", async () => {

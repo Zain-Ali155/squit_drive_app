@@ -28,6 +28,15 @@ test("defaults a blank API base URL to same-origin routing on Vercel", () => {
   });
 });
 
+test("defaults a missing or blank API base URL to same-origin routing in production", () => {
+  assert.deepEqual(readWebEnvironment({ NODE_ENV: "production" }), {
+    NEXT_PUBLIC_API_BASE_URL: "/"
+  });
+  assert.deepEqual(readWebEnvironment({ NODE_ENV: "production", NEXT_PUBLIC_API_BASE_URL: "   " }), {
+    NEXT_PUBLIC_API_BASE_URL: "/"
+  });
+});
+
 test("rejects an invalid API URL", () => {
   assert.throws(() => readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "not-a-url" }));
 });
@@ -52,7 +61,11 @@ test("requires the API URL from the environment", () => {
 });
 
 test("still requires the API URL outside Vercel", () => {
-  assert.throws(() => readWebEnvironment({ NODE_ENV: "production" }), ZodError);
+  assert.throws(() => readWebEnvironment({ NODE_ENV: "development" }), ZodError);
+});
+
+test("rejects malformed non-empty API URLs in production", () => {
+  assert.throws(() => readWebEnvironment({ NODE_ENV: "production", NEXT_PUBLIC_API_BASE_URL: "not-a-url" }), ZodError);
 });
 
 test("web server scripts use the local-only dual-loopback server", async () => {

@@ -5,7 +5,15 @@ import type { ValidatedWebEnvironment, WebEnvironmentSource } from "@/types";
 
 export const readWebEnvironment = (
   source: WebEnvironmentSource = process.env
-): ValidatedWebEnvironment => validateWebEnvironment({
-  NEXT_PUBLIC_API_BASE_URL:
-    source.NEXT_PUBLIC_API_BASE_URL || (source.VERCEL === "1" ? "/" : undefined)
-});
+): ValidatedWebEnvironment => {
+  const configuredApiBaseUrl = source.NEXT_PUBLIC_API_BASE_URL;
+  const useSameOriginApi = source.NODE_ENV === "production" || source.VERCEL === "1";
+
+  return validateWebEnvironment({
+    NEXT_PUBLIC_API_BASE_URL: configuredApiBaseUrl?.trim()
+      ? configuredApiBaseUrl
+      : useSameOriginApi
+        ? "/"
+        : undefined
+  });
+};

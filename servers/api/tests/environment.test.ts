@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { ZodError } from "zod";
 import { createApiConfig, readApiEnvironment } from "../config/index.js";
 
@@ -20,6 +21,19 @@ void test("derives API configuration from validated environment input", () => {
     webOrigin: "http://localhost:3000",
     logLevel: "warn"
   });
+});
+
+void test("Vercel API service uses an explicit ESM entrypoint", async () => {
+  const [configText, entrypoint] = await Promise.all([
+    readFile(new URL("../../../vercel.json", import.meta.url), "utf8"),
+    readFile(new URL("../app.mts", import.meta.url), "utf8")
+  ]);
+  const config = JSON.parse(configText) as {
+    services: { api: { entrypoint: string } };
+  };
+
+  assert.equal(config.services.api.entrypoint, "app.mts");
+  assert.match(entrypoint, /export default app;/u);
 });
 
 void test("accepts localhost and IPv6 loopback origins", () => {

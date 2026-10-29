@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "tsx --test features/health/tests/*.test.ts features/drive/tests/*.test.ts features/auth/tests/*.test.ts tests/drive-http.test.ts tests/environment.test.ts tests/http-boundaries.test.ts tests/mongodb.test.ts tests/shutdown.test.ts",
-    "lint": "eslint \"**/*.ts\"",
+    "lint": "eslint \"**/*.ts\" \"**/*.mts\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

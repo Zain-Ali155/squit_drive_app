@@ -3,7 +3,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export const createNodeConfig = ({
-  files = ["**/*.ts"],
+  files = ["**/*.{ts,mts}"],
   ignores = ["dist/**"],
   rules = {},
   tsconfigRootDir

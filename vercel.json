@@ -8,7 +8,7 @@
     "api": {
       "root": "servers/api",
       "framework": "express",
-      "entrypoint": "app.ts"
+      "entrypoint": "app.mts"
     }
   },
   "rewrites": [

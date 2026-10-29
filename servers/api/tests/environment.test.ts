@@ -34,10 +34,12 @@ void test("Vercel API service uses an explicit ESM entrypoint", async () => {
   };
   const apiPackage = JSON.parse(packageText) as { scripts: { build: string } };
 
-  assert.equal(config.services.api.entrypoint, "app.mts");
+  assert.equal(config.services.api.entrypoint, "dist/vercel-app.mjs");
   assert.match(entrypoint, /export default app;/u);
   assert.doesNotMatch(entrypoint, /dotenv\/config/u);
-  assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build && tsc/u);
+  assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build/u);
+  assert.match(apiPackage.scripts.build, /esbuild app\.mts --bundle --platform=node --format=esm/u);
+  assert.match(apiPackage.scripts.build, /--outfile=dist\/vercel-app\.mjs/u);
 });
 
 void test("accepts localhost and IPv6 loopback origins", () => {

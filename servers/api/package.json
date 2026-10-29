@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server.ts",
-    "build": "pnpm --dir ../../packages/logging run build && tsc -p tsconfig.build.json",
+    "build": "pnpm --dir ../../packages/logging run build && tsc -p tsconfig.build.json && esbuild app.mts --bundle --platform=node --format=esm --target=node20 --external:express --external:google-auth-library --external:mongoose --external:zod --outfile=dist/vercel-app.mjs",
     "start": "node dist/server.js",
     "test": "tsx --test features/health/tests/*.test.ts features/drive/tests/*.test.ts features/auth/tests/*.test.ts tests/drive-http.test.ts tests/environment.test.ts tests/http-boundaries.test.ts tests/mongodb.test.ts tests/shutdown.test.ts",
     "lint": "eslint \"**/*.ts\" \"**/*.mts\"",
@@ -25,6 +25,7 @@
     "@types/node": "^22.20.3",
     "@workspace/eslint-config": "workspace:*",
     "@workspace/tsconfig": "workspace:*",
+    "esbuild": "0.28.2",
     "eslint": "9.39.5",
     "tsx": "^4.23.13",
     "typescript": "5.9.3"

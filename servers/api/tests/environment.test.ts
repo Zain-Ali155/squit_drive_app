@@ -24,17 +24,20 @@ void test("derives API configuration from validated environment input", () => {
 });
 
 void test("Vercel API service uses an explicit ESM entrypoint", async () => {
-  const [configText, entrypoint] = await Promise.all([
+  const [configText, entrypoint, packageText] = await Promise.all([
     readFile(new URL("../../../vercel.json", import.meta.url), "utf8"),
-    readFile(new URL("../app.mts", import.meta.url), "utf8")
+    readFile(new URL("../app.mts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8")
   ]);
   const config = JSON.parse(configText) as {
     services: { api: { entrypoint: string } };
   };
+  const apiPackage = JSON.parse(packageText) as { scripts: { build: string } };
 
   assert.equal(config.services.api.entrypoint, "app.mts");
   assert.match(entrypoint, /export default app;/u);
   assert.doesNotMatch(entrypoint, /dotenv\/config/u);
+  assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build && tsc/u);
 });
 
 void test("accepts localhost and IPv6 loopback origins", () => {

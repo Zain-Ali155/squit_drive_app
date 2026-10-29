@@ -47,6 +47,8 @@ void test("Vercel API service uses an explicit ESM entrypoint", async () => {
   assert.equal(apiPackage.scripts.start, "node dist/local-server.js");
   assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build/u);
   assert.match(apiPackage.scripts.build, /esbuild vercel-app-source\.mts --bundle --platform=node --format=esm/u);
+  assert.match(apiPackage.scripts.build, /--banner:js=.*createRequire/u);
+  assert.doesNotMatch(apiPackage.scripts.build, /--external:/u);
   assert.match(apiPackage.scripts.build, /--outfile=dist\/vercel-app\.mjs/u);
   await assert.rejects(readFile(new URL("../server.ts", import.meta.url)), { code: "ENOENT" });
 });

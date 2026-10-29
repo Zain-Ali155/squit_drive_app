@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch local-server.ts",
-    "build": "pnpm --dir ../../packages/logging run build && tsc -p tsconfig.build.json && esbuild vercel-app-source.mts --bundle --platform=node --format=esm --target=node20 --external:express --external:google-auth-library --external:mongoose --external:zod --outfile=dist/vercel-app.mjs",
+    "build": "pnpm --dir ../../packages/logging run build && tsc -p tsconfig.build.json && esbuild vercel-app-source.mts --bundle --platform=node --format=esm --target=node20 \"--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" --outfile=dist/vercel-app.mjs",
     "start": "node dist/local-server.js",
     "test": "tsx --test features/health/tests/*.test.ts features/drive/tests/*.test.ts features/auth/tests/*.test.ts tests/drive-http.test.ts tests/environment.test.ts tests/http-boundaries.test.ts tests/mongodb.test.ts tests/shutdown.test.ts",
     "lint": "eslint \"**/*.ts\" \"**/*.mts\"",

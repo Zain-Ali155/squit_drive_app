@@ -26,7 +26,7 @@ void test("derives API configuration from validated environment input", () => {
 void test("Vercel API service uses an explicit ESM entrypoint", async () => {
   const [configText, entrypoint, wrapper, packageText] = await Promise.all([
     readFile(new URL("../../../vercel.json", import.meta.url), "utf8"),
-    readFile(new URL("../app.mts", import.meta.url), "utf8"),
+    readFile(new URL("../vercel-app-source.mts", import.meta.url), "utf8"),
     readFile(new URL("../app.mjs", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8")
   ]);
@@ -40,7 +40,7 @@ void test("Vercel API service uses an explicit ESM entrypoint", async () => {
   assert.doesNotMatch(entrypoint, /dotenv\/config/u);
   assert.match(wrapper, /export \{ default \} from ["']\.\/dist\/vercel-app\.mjs["'];/u);
   assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build/u);
-  assert.match(apiPackage.scripts.build, /esbuild app\.mts --bundle --platform=node --format=esm/u);
+  assert.match(apiPackage.scripts.build, /esbuild vercel-app-source\.mts --bundle --platform=node --format=esm/u);
   assert.match(apiPackage.scripts.build, /--outfile=dist\/vercel-app\.mjs/u);
 });
 

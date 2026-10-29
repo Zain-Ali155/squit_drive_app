@@ -24,24 +24,31 @@ void test("derives API configuration from validated environment input", () => {
 });
 
 void test("Vercel API service uses an explicit ESM entrypoint", async () => {
-  const [configText, entrypoint, wrapper, packageText] = await Promise.all([
+  const [configText, entrypoint, wrapper, localServer, packageText] = await Promise.all([
     readFile(new URL("../../../vercel.json", import.meta.url), "utf8"),
     readFile(new URL("../vercel-app-source.mts", import.meta.url), "utf8"),
     readFile(new URL("../app.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../local-server.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8")
   ]);
   const config = JSON.parse(configText) as {
     services: { api: { entrypoint: string } };
   };
-  const apiPackage = JSON.parse(packageText) as { scripts: { build: string } };
+  const apiPackage = JSON.parse(packageText) as {
+    scripts: { build: string; dev: string; start: string };
+  };
 
   assert.equal(config.services.api.entrypoint, "app.mjs");
   assert.match(entrypoint, /export default app;/u);
   assert.doesNotMatch(entrypoint, /dotenv\/config/u);
   assert.match(wrapper, /export \{ default \} from ["']\.\/dist\/vercel-app\.mjs["'];/u);
+  assert.match(localServer, /dotenv\/config/u);
+  assert.equal(apiPackage.scripts.dev, "tsx watch local-server.ts");
+  assert.equal(apiPackage.scripts.start, "node dist/local-server.js");
   assert.match(apiPackage.scripts.build, /pnpm --dir \.\.\/\.\.\/packages\/logging run build/u);
   assert.match(apiPackage.scripts.build, /esbuild vercel-app-source\.mts --bundle --platform=node --format=esm/u);
   assert.match(apiPackage.scripts.build, /--outfile=dist\/vercel-app\.mjs/u);
+  await assert.rejects(readFile(new URL("../server.ts", import.meta.url)), { code: "ENOENT" });
 });
 
 void test("accepts localhost and IPv6 loopback origins", () => {

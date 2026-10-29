@@ -34,6 +34,7 @@ void test("Vercel API service uses an explicit ESM entrypoint", async () => {
 
   assert.equal(config.services.api.entrypoint, "app.mts");
   assert.match(entrypoint, /export default app;/u);
+  assert.doesNotMatch(entrypoint, /dotenv\/config/u);
 });
 
 void test("accepts localhost and IPv6 loopback origins", () => {

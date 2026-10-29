@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { createLogger } from "@workspace/logging";
 import { createApp } from "./bootstrap/index.js";
 import { createApiConfig, readApiEnvironment } from "./config/index.js";

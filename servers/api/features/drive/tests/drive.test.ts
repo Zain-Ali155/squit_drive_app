@@ -490,13 +490,17 @@ const createUploadRecoveryHarness = ({
     parentId: null, isStarred: false, state: "active", createdAt: now, updatedAt: now
   };
   const createdEntries: Omit<DriveEntryRecord, "createdAt" | "updatedAt">[] = [];
+  const findOwnedEntryCalls: string[] = [];
   const objects = new Map<string, Buffer>();
   const removedKeys: string[] = [];
   const errorLogs: Readonly<{ message: string; context?: LogContext }>[] = [];
   const warnLogs: Readonly<{ message: string; context?: LogContext }>[] = [];
   const releasedReservations: string[] = [];
   const repository: DriveRepository = {
-    findOwnedEntry: () => Promise.resolve(root),
+    findOwnedEntry: (_ownerId, entryId) => {
+      findOwnedEntryCalls.push(entryId);
+      return Promise.resolve(entryId === root._id ? root : null);
+    },
     recordOwnedFileAccess: () => Promise.resolve(null),
     findOwnedEntryForDeletion: () => Promise.resolve(null),
     listOwnedEntries: () => Promise.resolve({ entries: [], total: 0 }),
@@ -549,6 +553,7 @@ const createUploadRecoveryHarness = ({
   return {
     service: createDriveService({ repository, storage, logger, ownerId: "local-demo-owner" }),
     createdEntries,
+    findOwnedEntryCalls,
     objects,
     removedKeys,
     releasedReservations,
@@ -556,6 +561,20 @@ const createUploadRecoveryHarness = ({
     warnLogs
   };
 };
+
+void test("root listings reuse the owner-scoped root while nested listings still validate the folder", async (): Promise<void> => {
+  const harness = createUploadRecoveryHarness({ metadataLookup: () => Promise.resolve(false) });
+  const rootResult = await harness.service.list({ page: 1, pageSize: 25 });
+
+  assert.equal(rootResult.parentId, "root-id");
+  assert.deepEqual(harness.findOwnedEntryCalls, []);
+
+  await assert.rejects(
+    harness.service.list({ page: 1, pageSize: 25, parentId: "nested-id" }),
+    (error: unknown) => isApplicationError(error) && error.code === ERROR_CODES.driveEntryNotFound
+  );
+  assert.deepEqual(harness.findOwnedEntryCalls, ["nested-id"]);
+});
 
 void test("Drive upload rejects files that exceed the owner's 1 GB quota before writing to Storage", async (): Promise<void> => {
   const input = uploadRecoveryInput();

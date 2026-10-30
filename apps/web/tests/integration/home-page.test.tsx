@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
-import HomePage from "../../app/(public)/page";
+import { WorkspaceFoundation } from "../../features/workspace-foundation/components";
 
-test("composes environment-derived API configuration into the health action", () => {
-  process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.example.test";
-  const markup = renderToStaticMarkup(<HomePage />);
-  assert.match(markup, /Your local workspace is ready/);
-  assert.match(markup, /href="https:\/\/api\.example\.test\/health"/);
+test("renders a production-ready SQUID Drive sign-in landing without local-demo copy", () => {
+  const markup = renderToStaticMarkup(<WorkspaceFoundation authControls={<a href="/auth/google/login">Sign in with Google</a>} />);
+  assert.match(markup, /Your files, all in one place/);
+  assert.match(markup, /Sign in securely with your Google account/);
+  assert.match(markup, /Sign in with Google/);
+  assert.doesNotMatch(markup, /local workspace|demo owner|Runtime foundation|API boundary|Open SQUID Drive/iu);
 });

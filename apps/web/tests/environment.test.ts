@@ -10,6 +10,12 @@ test("derives API configuration from validated environment input", () => {
   assert.deepEqual(createApiConfiguration(environment), { baseUrl: "https://api.example.test" });
 });
 
+test("trims surrounding whitespace from a configured API base URL", () => {
+  const environment = readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "  https://api.example.test  " });
+
+  assert.deepEqual(createApiConfiguration(environment), { baseUrl: "https://api.example.test" });
+});
+
 test("accepts same-origin API routing for multi-service deployments", () => {
   const environment = readWebEnvironment({ NEXT_PUBLIC_API_BASE_URL: "/" });
   assert.deepEqual(createApiConfiguration(environment), { baseUrl: "/" });

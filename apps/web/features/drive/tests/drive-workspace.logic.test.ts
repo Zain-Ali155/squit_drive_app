@@ -8,6 +8,7 @@ import {
   formatDriveStorageUsage,
   driveFavoriteActionLabel,
   driveFiltersAreActive,
+  driveListParentId,
   emptyDriveFilters,
   folderLocationAtBreadcrumb,
   folderLocationFromBreadcrumbs,
@@ -47,6 +48,12 @@ void test("opening a nested folder from search uses its full ancestry and breadc
   assert.deepEqual(folderLocationAtBreadcrumb(searchResultPath, 0), {
     breadcrumbs: searchResultPath.slice(0, 1), parentId: "root-id"
   });
+});
+
+void test("root listings omit a redundant explicit parent while nested listings retain their parent", (): void => {
+  assert.equal(driveListParentId(undefined, undefined), undefined);
+  assert.equal(driveListParentId("root-id", "root-id"), undefined);
+  assert.equal(driveListParentId("nested-id", "root-id"), "nested-id");
 });
 
 void test("folder creation preserves the name when creation fails and clears it after success", async (): Promise<void> => {

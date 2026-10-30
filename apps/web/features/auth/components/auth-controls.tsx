@@ -1,16 +1,31 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useState, type ReactElement } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@workspace/ui";
 import { resolveBrowserApiBaseUrl } from "@/config/api";
 import { AuthApiUnavailableError, createAuthApi } from "../auth.api";
 import { initialAuthState, reduceAuthState } from "../auth-state";
 
-type AuthControlsProps = Readonly<{ apiBaseUrl: string; className?: string; compactLabel?: boolean; hiddenOnDrive?: boolean }>;
+type AuthControlsProps = Readonly<{
+  apiBaseUrl: string;
+  className?: string;
+  compactLabel?: boolean;
+  hiddenOnDrive?: boolean;
+  redirectAuthenticatedTo?: "/drive";
+  redirectAfterLogoutTo?: "/";
+}>;
 
-export const AuthControls = ({ apiBaseUrl, className, compactLabel = false, hiddenOnDrive = false }: AuthControlsProps): ReactElement | null => {
+export const AuthControls = ({
+  apiBaseUrl,
+  className,
+  compactLabel = false,
+  hiddenOnDrive = false,
+  redirectAuthenticatedTo,
+  redirectAfterLogoutTo
+}: AuthControlsProps): ReactElement | null => {
   const pathname = usePathname();
+  const router = useRouter();
   const api = useMemo(() => createAuthApi({ baseUrl: resolveBrowserApiBaseUrl(apiBaseUrl) }), [apiBaseUrl]);
   const [state, dispatch] = useReducer(reduceAuthState, initialAuthState);
   const [retryCount, setRetryCount] = useState(0);
@@ -34,11 +49,18 @@ export const AuthControls = ({ apiBaseUrl, className, compactLabel = false, hidd
     return () => { active = false; };
   }, [api, hiddenOnDrive, pathname, retryCount]);
 
+  useEffect(() => {
+    if (state.status === "authenticated" && redirectAuthenticatedTo) {
+      router.replace(redirectAuthenticatedTo);
+    }
+  }, [redirectAuthenticatedTo, router, state.status]);
+
   const logout = async (): Promise<void> => {
     dispatch({ type: "logout-started" });
     try {
       await api.logout();
       dispatch({ type: "logout-succeeded" });
+      if (redirectAfterLogoutTo) router.replace(redirectAfterLogoutTo);
     } catch (cause) {
       dispatch({
         type: "logout-failed",

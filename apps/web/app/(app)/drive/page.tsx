@@ -7,7 +7,7 @@ const DrivePage = (): ReactElement => {
   const api = createApiConfiguration(readWebEnvironment());
   return <DriveWorkspace
     apiBaseUrl={api.baseUrl}
-    authControls={<AuthControls apiBaseUrl={api.baseUrl} className="flex shrink-0 items-center" compactLabel />}
+    authControls={<AuthControls apiBaseUrl={api.baseUrl} className="flex shrink-0 items-center" compactLabel redirectAfterLogoutTo="/" />}
   />;
 };
 

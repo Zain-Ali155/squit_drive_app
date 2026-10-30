@@ -139,7 +139,9 @@ export const createDriveService = ({ repository, logger, ownerId, recipientEmail
   const list = async ({ parentId, ...page }: DrivePage & Readonly<{ parentId?: string }>) => {
     const root = await repository.ensureRoot(ownerId);
     const actualParentId = parentId ?? root._id;
-    if (!page.favorites && !page.recent && !page.trash) await requireFolder(actualParentId);
+    if (!page.favorites && !page.recent && !page.trash && actualParentId !== root._id) {
+      await requireFolder(actualParentId);
+    }
     const result = await repository.listOwnedEntries(ownerId, actualParentId, page);
     return Object.freeze({ ...result, parentId: actualParentId });
   };

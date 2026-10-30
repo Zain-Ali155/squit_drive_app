@@ -73,6 +73,9 @@ export type DriveLocation = Readonly<{
   parentId: string;
 }>;
 
+export const driveListParentId = (parentId: string | undefined, rootId: string | undefined): string | undefined =>
+  parentId === rootId ? undefined : parentId;
+
 export const folderLocationFromBreadcrumbs = (breadcrumbs: readonly ApiDriveBreadcrumb[]): DriveLocation | undefined => {
   const current = breadcrumbs.at(-1);
   return current ? Object.freeze({ breadcrumbs, parentId: current.id }) : undefined;

@@ -11,7 +11,7 @@ export const readWebEnvironment = (
 
   return validateWebEnvironment({
     NEXT_PUBLIC_API_BASE_URL: configuredApiBaseUrl?.trim()
-      ? configuredApiBaseUrl
+      ? configuredApiBaseUrl.trim()
       : useSameOriginApi
         ? "/"
         : undefined

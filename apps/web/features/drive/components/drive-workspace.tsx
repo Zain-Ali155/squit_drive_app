@@ -20,6 +20,7 @@ import {
   createFolderAndClearName,
   driveFavoriteActionLabel,
   driveFiltersAreActive,
+  driveListParentId,
   emptyDriveFilters,
   driveStorageUsagePercent,
   formatDriveStorageUsage,
@@ -192,6 +193,7 @@ export const DriveWorkspace = ({ apiBaseUrl, authControls }: DriveWorkspaceProps
   const [entries, setEntries] = useState<readonly ApiDriveEntry[]>([]);
   const [parentId, setParentId] = useState<string>();
   const [rootId, setRootId] = useState<string>();
+  const rootIdRef = useRef<string | undefined>(undefined);
   const [path, setPath] = useState<readonly Breadcrumb[]>([]);
   const [search, setSearch] = useState("");
   const [favoritesView, setFavoritesView] = useState(false);
@@ -338,8 +340,9 @@ export const DriveWorkspace = ({ apiBaseUrl, authControls }: DriveWorkspaceProps
     }
   }, [api]);
 
+  const listParentId = driveListParentId(parentId, rootId);
   const listInput = useMemo(() => ({
-    ...(!search.trim() && !favoritesView && !recentView && !trashView && parentId ? { parentId } : {}),
+    ...(!search.trim() && !favoritesView && !recentView && !trashView && listParentId ? { parentId: listParentId } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
     ...(favoritesView ? { favorites: true } : {}),
     ...(recentView ? { recent: true } : {}),
@@ -347,7 +350,7 @@ export const DriveWorkspace = ({ apiBaseUrl, authControls }: DriveWorkspaceProps
     ...createDriveListFilterOptions(filters),
     page,
     pageSize
-  }), [favoritesView, filters, page, parentId, recentView, search, trashView]);
+  }), [favoritesView, filters, listParentId, page, recentView, search, trashView]);
   const reload = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(undefined);
@@ -382,7 +385,8 @@ export const DriveWorkspace = ({ apiBaseUrl, authControls }: DriveWorkspaceProps
         }
         setEntries(result.entries);
         setTotal(result.total);
-        if (!rootId) {
+        if (!rootIdRef.current) {
+          rootIdRef.current = result.parentId;
           setRootId(result.parentId);
           setParentId(result.parentId);
           setPath([{ id: result.parentId, name: "My Drive" }]);
@@ -395,7 +399,7 @@ export const DriveWorkspace = ({ apiBaseUrl, authControls }: DriveWorkspaceProps
     };
     void load();
     return () => { active = false; };
-  }, [api, listInput, listRefresh, rootId]);
+  }, [api, listInput, listRefresh]);
 
   useEffect(() => {
     let active = true;

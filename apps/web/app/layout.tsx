@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactElement } from "react";
 import { application } from "@/constants/application";
-import { createApiConfiguration, readWebEnvironment } from "@/config";
-import { AuthControls } from "@/features/auth/components/auth-controls";
 import type { RootLayoutProps } from "@/types";
 import "./globals.css";
 
@@ -14,7 +12,6 @@ export const metadata: Metadata = {
 const RootLayout = ({ children }: RootLayoutProps): ReactElement => (
   <html lang="en">
     <body>
-      <AuthControls apiBaseUrl={createApiConfiguration(readWebEnvironment()).baseUrl} hiddenOnDrive />
       {children}
     </body>
   </html>
